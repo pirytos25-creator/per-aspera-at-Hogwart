@@ -1,0 +1,10 @@
+{
+  "name": "hogwarts-atlas",
+  "version": "1.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server.mjs",
+    "check": "node --check dist/js/app.js && node --check dist/js/world.js && node --check dist/js/interiors.js && node --check dist/js/data.js && node --check dist/js/magic.js && node --check dist/js/graphics.js && node --check dist/js/environment.js && node --check dist/js/atmosphere.js && node --check dist/js/audio.js"
+  }
+}

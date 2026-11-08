@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#111d22" />
+    <meta
+      name="description"
+      content="Wejdź do magicznego świata. Interaktywna wycieczka 3D po Hogwarcie, lekcje magii, Zakazany Las i Hogsmeade."
+    />
+    <meta property="og:title" content="Hogwart — Atlas magicznego świata" />
+    <meta
+      property="og:description"
+      content="Interaktywna wycieczka 3D: zamek, błonia, 40 wnętrz, lekcje i zaklęcia. Nieoficjalny projekt fanowski."
+    />
+    <meta property="og:type" content="website" />
+    <title>Hogwart — Atlas magicznego świata</title>
+    <link rel="icon" href="./assets/crest.svg" type="image/svg+xml" />
+    <link rel="preload" href="./assets/cormorant.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div id="viewport" aria-label="Trójwymiarowy świat Hogwartu"></div>
+    <div class="vignette"></div>
+    <div class="grain"></div>
+    <div id="shutter" aria-hidden="true"></div>
+    <div id="loading" role="status" aria-live="polite">
+      <div class="loading-crest">H</div>
+      <p>OTWIERAMY BRAMY</p>
+      <span id="loading-label">Układamy kamienie, zapalamy świece…</span>
+      <div class="loading-line"><i id="loading-bar"></i></div>
+      <small class="loading-tip">Wskazówka: Ctrl + K otwiera wyszukiwarkę sal i miejsc.</small>
+    </div>
+    <header>
+      <a class="brand" href="./" aria-label="Hogwart — widok zamku"
+        ><span class="crest">H</span><span>HOGWART<small>ATLAS MAGICZNEGO ŚWIATA</small></span></a
+      >
+      <nav aria-label="Nawigacja">
+        <button class="nav-item active" data-panel="explore">Odkrywaj</button
+        ><button class="nav-item" data-panel="rooms">Zamek i sale</button
+        ><button class="nav-item" data-panel="lessons">Nauka magii</button
+        ><button class="nav-item" data-panel="journal">
+          Mój dziennik <span id="journal-dot" aria-hidden="true"></span>
+        </button>
+      </nav>
+      <div class="header-actions">
+        <button
+          class="search-button"
+          id="search-button"
+          title="Szukaj (Ctrl + K)"
+          aria-label="Szukaj sal i miejsc"
+        >
+          <span aria-hidden="true">⌕</span> Szukaj <kbd>Ctrl K</kbd></button
+        ><button
+          class="icon-button"
+          id="sound"
+          title="Włącz dźwięki otoczenia (M)"
+          aria-label="Włącz dźwięki otoczenia"
+        >
+          ♫</button
+        ><button
+          class="icon-button"
+          id="help"
+          title="Sterowanie i informacje"
+          aria-label="Sterowanie i informacje"
+        >
+          ?</button
+        ><button class="profile" id="house" title="Wybierz swój dom" aria-label="Wybierz swój dom">H</button>
+      </div>
+    </header>
+    <main>
+      <section class="intro" id="intro">
+        <div class="eyebrow"><span></span> SZKOCJA · HIGHLANDS</div>
+        <h1>Niektóre miejsca<br />czekają na <em>Ciebie.</em></h1>
+        <p>Za jeziorem, pośród gór i tajemnic.<br />Odkryj Hogwart we własnym tempie.</p>
+        <button class="primary" id="begin-tour">Rozpocznij wycieczkę <span>↗</span></button
+        ><button class="text-button" id="enter-hall">Wejdź do Wielkiej Sali <span>→</span></button>
+        <div class="intro-facts">
+          <span><strong id="room-count">40</strong> miejsc w zamku</span><i></i
+          ><span><strong>4</strong> pory dnia</span><i></i><span><strong>∞</strong> odrobina magii</span>
+        </div>
+      </section>
+      <div class="world-caption" id="world-caption">
+        <span class="fine-label">01 / ZAMEK I BŁONIA</span>
+        <h2>Hogwart</h2>
+        <p>Dom jest tam, gdzie zaczyna się magia.</p>
+      </div>
+      <div id="markers" aria-label="Miejsca na mapie"></div>
+      <div class="compass" aria-label="Kompas">
+        <span>N</span
+        ><svg viewBox="0 0 60 60" aria-hidden="true">
+          <circle cx="30" cy="30" r="23" />
+          <path d="M30 8 L34 30 L30 52 L26 30Z" />
+          <path d="M8 30H52" />
+        </svg>
+      </div>
+      <div class="view-tools">
+        <button id="mode" class="tool-button" title="Przełącz między widokiem z góry a lotem (F)">
+          ◇ <span>Widok z góry</span><kbd>F</kbd></button
+        ><button id="time" aria-label="Zmień porę dnia" class="tool-button" title="Zmień porę dnia (T)">
+          ◒ <span>Zmierzch</span><kbd>T</kbd></button
+        ><button id="weather" aria-label="Zmień pogodę" class="tool-button" title="Zmień pogodę (O)">
+          <i class="weather-icon">☼</i> <span>Pogodnie</span><kbd>O</kbd></button
+        ><button
+          id="quality"
+          aria-label="Ustaw jakość grafiki"
+          class="tool-button"
+          title="Ustaw jakość grafiki"
+        >
+          ✦ <span>Grafika Ultra</span></button
+        ><button
+          id="photo"
+          aria-label="Zapisz zdjęcie świata"
+          class="tool-button"
+          title="Zapisz zdjęcie świata (P)"
+        >
+          ▣ <span>Zrób zdjęcie</span><kbd>P</kbd>
+        </button>
+      </div>
+      <aside class="drawer" id="drawer" aria-label="Atlas miejsc" hidden>
+        <div class="drawer-top">
+          <span class="eyebrow" id="drawer-kicker">TWÓJ PRZEWODNIK</span
+          ><button class="icon-button" id="close-drawer" aria-label="Zamknij panel">×</button>
+        </div>
+        <div id="drawer-content"></div>
+      </aside>
+      <section class="room-hud" id="room-hud" hidden>
+        <div class="room-actions">
+          <button id="leave-room" class="back-button">← Wróć na błonia</button
+          ><button id="share-room" class="back-button" title="Kopiuj link do tej sali">Kopiuj link ⧉</button>
+        </div>
+        <span class="eyebrow" id="room-subject"></span>
+        <h1 id="room-name"></h1>
+        <p id="room-description"></p>
+        <p id="room-detail" class="room-detail" hidden></p>
+        <button id="room-more" class="text-button more-button" hidden>Więcej o tym miejscu ↓</button>
+        <button class="primary" id="talk-teacher" hidden></button>
+        <div class="walking-hint">
+          WASD · spacer &nbsp; / &nbsp; przeciągnij · rozejrzyj się &nbsp; / &nbsp; E · rozmowa
+        </div>
+      </section>
+      <button class="interact" id="interact" hidden></button>
+      <div class="tour-bar" id="tour-bar" hidden>
+        <i class="tour-progress" id="tour-progress"></i>
+        <div>
+          <span class="eyebrow" id="tour-step"></span>
+          <h3 id="tour-title"></h3>
+          <p id="tour-caption"></p>
+        </div>
+        <button class="icon-button" id="tour-prev" aria-label="Poprzedni przystanek">←</button
+        ><button class="primary" id="tour-next">Dalej →</button
+        ><button class="icon-button" id="tour-stop" aria-label="Zakończ wycieczkę">×</button>
+      </div>
+      <div class="spell-flash" id="spell-flash"></div>
+      <div id="crosshair" hidden>+</div>
+      <section class="spellbar" id="spellbar" hidden aria-label="Zaklęcia">
+        <span class="fine-label">TWOJA RÓŻDŻKA</span>
+        <div id="spell-buttons"></div>
+      </section>
+      <div id="toast" role="status" aria-live="polite"></div>
+      <div class="mobile-move" id="mobile-move">
+        <button data-move="KeyW" aria-label="Idź do przodu">↑</button
+        ><button data-move="KeyA" aria-label="Idź w lewo">←</button
+        ><button data-move="KeyS" aria-label="Idź do tyłu">↓</button
+        ><button data-move="KeyD" aria-label="Idź w prawo">→</button>
+      </div>
+    </main>
+    <footer id="footer">
+      <div class="places" id="places"></div>
+      <div class="footer-line">
+        <span class="live-indicator"></span><span id="position-label">Jesteś w magicznym świecie</span>
+        <span id="streaming" class="streaming" hidden></span>
+        <div class="control-hint">
+          <span>PRZECIĄGNIJ, ABY OBRÓCIĆ</span><i></i><span>SCROLL, ABY PRZYBLIŻYĆ</span>
+        </div>
+        <button id="sources">O atlasie i źródłach ↗</button>
+      </div>
+    </footer>
+    <dialog id="modal">
+      <div class="modal-top">
+        <span class="eyebrow" id="modal-label"></span
+        ><button class="icon-button" id="close-modal" aria-label="Zamknij okno">×</button>
+      </div>
+      <div id="modal-content"></div>
+    </dialog>
+    <dialog id="palette" class="palette" aria-label="Szybkie wyszukiwanie">
+      <div class="palette-search">
+        <span aria-hidden="true">⌕</span
+        ><input
+          id="palette-input"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Dokąd idziemy? Sala, profesor, miejsce, zaklęcie, „noc”…"
+          aria-label="Szukaj"
+          aria-controls="palette-list"
+        />
+      </div>
+      <div id="palette-list" role="listbox"></div>
+      <div class="palette-foot">
+        <kbd>↑</kbd><kbd>↓</kbd> wybierz <kbd>Enter</kbd> otwórz <kbd>Esc</kbd> zamknij
+      </div>
+    </dialog>
+    <noscript><p class="noscript">Atlas potrzebuje JavaScriptu i WebGL.</p></noscript>
+    <script>
+      // Friendly messages for the two most common ways the atlas fails to start.
+      (function () {
+        function explain(title, text) {
+          var box = document.getElementById('loading');
+          if (!box) return;
+          box.classList.add('failed');
+          box.innerHTML = '<div class="loading-crest">H</div><p>' + title + '</p><span>' + text + '</span>';
+        }
+        if (location.protocol === 'file:') {
+          explain(
+            'POTRZEBNY LOKALNY SERWER',
+            'Moduły JavaScript nie działają po dwukliku na plik. W folderze projektu uruchom <code>node server.mjs</code> i otwórz <code>http://127.0.0.1:4173</code>.',
+          );
+          return;
+        }
+        window.addEventListener('error', function (event) {
+          if (window.__atlasReady) return;
+          var message = (event && event.message) || 'nieznany błąd';
+          if (/WebGL/i.test(message)) return;
+          explain(
+            'COŚ POSZŁO NIE TAK',
+            'Atlas nie wystartował: ' + String(message).replace(/[<>&]/g, '') + '. Odśwież stronę.',
+          );
+        });
+        setTimeout(function () {
+          if (!window.__atlasBoot)
+            explain(
+              'ATLAS SIĘ NIE URUCHOMIŁ',
+              'Przeglądarka nie wczytała skryptów. Sprawdź połączenie i odśwież stronę.',
+            );
+        }, 20000);
+      })();
+    </script>
+    <script type="importmap">
+      { "imports": { "three": "./assets/three.module.js" } }
+    </script>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

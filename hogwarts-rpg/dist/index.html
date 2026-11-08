@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#101b21"><title>Hogwart · Szlaki Magii</title><meta name="description" content="Wejdź w rolę ucznia Hogwartu. Oryginalna fanowska przygoda RPG: eksploracja, dialogi, zaklęcia i tajemnica leśnych run."><link rel="icon" href="./assets/crest.svg"><link rel="stylesheet" href="./game.css"></head>
+<body>
+<div id="viewport" aria-label="Świat gry 3D"></div><div class="vignette"></div><div id="hurt"></div><div id="fade"></div>
+<div id="loading" role="status"><span class="crest" aria-hidden="true">H</span><p>Wczytywanie świata</p><small>Hogwart · Szlaki Magii</small><div class="loading-line"></div></div>
+<section id="title-screen" hidden>
+ <div class="edition">ROZDZIAŁ I <span aria-hidden="true">/</span> ŚWIATŁO MIĘDZY DRZEWAMI</div>
+ <div class="title-copy"><h1>Hogwart<em>Szlaki Magii</em></h1>
+ <label class="name-label" for="player-name">Imię postaci</label><input id="player-name" maxlength="24" placeholder="Twoje imię" value="Adept" autocomplete="off">
+ <div id="houses" aria-label="Wybierz swój dom"></div>
+ <button class="primary" id="start-game">Nowa gra <span aria-hidden="true">→</span></button><button id="continue-game" class="secondary" hidden>Kontynuuj grę</button>
+ <small class="title-note">Postęp zapisuje się automatycznie na tym urządzeniu.</small></div>
+ <div class="title-bottom"><span>FANOWSKI PROJEKT · WERSJA 0.1</span><button id="about-title">Informacje i źródła</button></div>
+</section>
+<main id="hud" hidden>
+ <header class="top-hud"><div class="location"><span class="mini-crest" aria-hidden="true">H</span><div><span class="eyebrow" id="region">ZAMEK HOGWART</span><h2 id="location-name">Dziedziniec</h2></div></div><div class="compass" aria-label="Kierunek patrzenia"><span>W</span><i></i><span id="bearing">N</span><i></i><span>E</span><div id="compass-dot" aria-hidden="true">◆</div></div><nav class="top-actions" aria-label="Menu gry"><button id="open-map" aria-label="Mapa" title="Mapa [M]"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 5 6-2 6 2 6-2v16l-6 2-6-2-6 2Z M9 3v16 M15 5v16"/></svg><span>Mapa</span><kbd>M</kbd></button><button id="open-journal" aria-label="Dziennik" title="Dziennik [J]"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h14v18H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Z M6 3v18 M10 8h6 M10 12h6"/></svg><span>Dziennik</span><kbd>J</kbd></button><button id="open-menu" aria-label="Pauza i ustawienia" title="Pauza [Esc]"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16 M4 12h16 M4 18h16"/></svg></button></nav></header>
+ <aside class="quest-hud" aria-label="Bieżące zadanie"><span class="eyebrow">ZADANIE GŁÓWNE</span><h3 id="quest-title"></h3><p id="quest-objective"></p><div id="quest-progress"></div><button id="guide-button"><kbd>G</kbd> Wskaż drogę</button></aside>
+ <div id="target-hud" hidden><span id="target-name"></span><div class="target-track"><i id="target-health"></i></div></div>
+ <div id="aim"><i></i><i></i></div><div id="world-labels"></div>
+ <button id="interact" hidden><kbd>E</kbd><span><small id="interaction-kind">ROZMOWA</small><strong id="interaction-name"></strong></span><b>→</b></button>
+ <div class="bottom-hud"><section class="player-hud" aria-label="Statystyki postaci"><div class="level-badge" id="level" title="Poziom postaci">1</div><div class="player-vitals"><div class="player-name"><strong id="hud-name">Adept</strong><span id="hud-house">RAVENCLAW</span></div><div class="stat-track health"><i id="health-fill"></i><em>Zdrowie</em><span id="health-label">100 / 100</span></div><div class="stat-track mana"><i id="mana-fill"></i><em>Moc</em><span id="mana-label">100 / 100</span></div><div class="xp-track" aria-label="Doświadczenie"><i id="xp-fill"></i></div><div class="vital-labels"><span>PD</span><button id="potion" aria-label="Użyj eliksiru zdrowia"><kbd>R</kbd> Eliksir <b id="potion-count">3</b></button></div></div></section>
+ <section class="spell-hud" aria-label="Wybrane zaklęcie"><span id="spell-name">Podstawowy czar</span><div id="spellbar" aria-label="Zaklęcia"></div><small><kbd>LPM</kbd> / <kbd>SPACJA</kbd> Rzuć zaklęcie</small></section>
+ <section class="radar-hud"><canvas id="radar" width="190" height="190" aria-label="Minimapa najbliższej okolicy"></canvas><span id="radar-label">DZIEDZINIEC</span></section></div>
+ <div class="controls"><span><kbd>WASD</kbd> Ruch</span><span><kbd>SHIFT</kbd> Sprint</span><span><kbd>ALT</kbd> Unik</span><span><kbd>PPM</kbd> Rozglądanie</span><button id="mouse-lock">Zablokuj kursor</button><span id="fps"></span></div>
+ <div id="mobile-controls"><div class="mobile-pad"><button data-key="KeyW" aria-label="Idź do przodu">↑</button><button data-key="KeyA" aria-label="Idź w lewo">←</button><button data-key="KeyS" aria-label="Idź do tyłu">↓</button><button data-key="KeyD" aria-label="Idź w prawo">→</button></div><div class="mobile-actions"><button id="mobile-dodge" aria-label="Unik">◇</button><button id="mobile-cast" aria-label="Rzuć zaklęcie">ϟ</button></div></div>
+</main>
+<section id="dialogue" hidden aria-label="Rozmowa"><div class="dialogue-line"></div><div class="dialogue-main"><span class="eyebrow" id="speaker-role"></span><h2 id="speaker"></h2><p id="dialogue-text"></p><div id="choices"></div></div><button class="close-dialogue" id="leave-dialogue" aria-label="Zakończ rozmowę">×</button></section>
+<dialog id="panel" aria-labelledby="panel-kicker"><div class="panel-header"><span class="eyebrow" id="panel-kicker">HOGWART · SZLAKI MAGII</span><button id="close-panel" aria-label="Zamknij panel">×</button></div><div id="panel-content"></div></dialog>
+<div id="toast" role="status" aria-live="polite"></div><div id="chapter-toast"><small>ZADANIE UKOŃCZONE</small><h2></h2><p></p></div><div id="save-indicator">Zapisano grę</div>
+<script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script><script type="module" src="./js/game.js"></script>
+</body></html>
