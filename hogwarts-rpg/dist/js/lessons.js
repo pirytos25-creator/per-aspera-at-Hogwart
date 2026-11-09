@@ -184,20 +184,23 @@ export function createLessons({ scene, audio }) {
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // ---- drawing input
+  // a stroke may start a moment before the slate is ready again; it is kept and used then
   let stroke = null,
-    resolveStroke = null;
+    resolveStroke = null,
+    pendingStroke = null;
   const point = (e) => {
     const b = canvas.getBoundingClientRect();
     return [((e.clientX - b.left) / b.width) * SIZE, ((e.clientY - b.top) / b.height) * SIZE];
   };
   canvas.addEventListener("pointerdown", (e) => {
-    if (!resolveStroke) return;
+    if (!run || run.busy) return;
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     stroke = [point(e)];
+    pendingStroke = null;
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!stroke || !resolveStroke) return;
+    if (!stroke) return;
     const p = point(e),
       last = stroke[stroke.length - 1];
     if (Math.hypot(p[0] - last[0], p[1] - last[1]) < 2) return;
@@ -207,19 +210,25 @@ export function createLessons({ scene, audio }) {
     drawStroke(stroke);
   });
   const finishStroke = (e) => {
-    if (!stroke || !resolveStroke) return;
-    const s = stroke,
-      r = resolveStroke;
+    if (!stroke) return;
+    const s = stroke;
     stroke = null;
-    resolveStroke = null;
     if (e.pointerId !== undefined && canvas.hasPointerCapture?.(e.pointerId)) canvas.releasePointerCapture(e.pointerId);
-    r(s);
+    if (resolveStroke) {
+      const r = resolveStroke;
+      resolveStroke = null;
+      r(s);
+    } else pendingStroke = s;
   };
   canvas.addEventListener("pointerup", finishStroke);
   canvas.addEventListener("pointercancel", finishStroke);
   const capture = () =>
     new Promise((r) => {
-      resolveStroke = r;
+      if (pendingStroke) {
+        const s = pendingStroke;
+        pendingStroke = null;
+        r(s);
+      } else resolveStroke = r;
     });
 
   // ---- one demonstration by the teacher
@@ -227,6 +236,7 @@ export function createLessons({ scene, audio }) {
     const L = run;
     if (!L) return;
     L.busy = true;
+    stroke = pendingStroke = null;
     $("#lesson-again").disabled = true;
     $("#lesson-score").textContent = "";
     $("#lesson-score").className = "";
@@ -259,8 +269,10 @@ export function createLessons({ scene, audio }) {
     const L = run;
     if (!L) return null;
     L.shot?.("player");
-    board();
-    if (L.ghost) drawPattern(L.P, 1, "ghost");
+    if (!stroke) {
+      board();
+      if (L.ghost) drawPattern(L.P, 1, "ghost");
+    }
     status(L.attempts ? "Jeszcze raz. Narysuj ruch jednym pociągnięciem." : "Twoja kolej: narysuj ten ruch myszą lub palcem, jednym pociągnięciem.");
     const s = await capture();
     if (run !== L || !s) return null;
@@ -318,6 +330,7 @@ export function createLessons({ scene, audio }) {
     trail.stop();
     resolveStroke?.(null);
     resolveStroke = null;
+    stroke = pendingStroke = null;
     L?.onDone?.(result);
   }
   $("#lesson-again").onclick = async () => {
@@ -362,10 +375,11 @@ export function createLessons({ scene, audio }) {
     },
     // test hook: feed a stroke as if drawn on the card
     _draw(points) {
+      if (!run) return false;
       const r = resolveStroke;
-      if (!r) return false;
       resolveStroke = null;
-      r(points);
+      if (r) r(points);
+      else pendingStroke = points;
       return true;
     },
     _pattern(id, scale = 300, jitter = 0) {

@@ -694,6 +694,10 @@ function populate() {
       robe: "#66503d",
       hair: "#493729",
       scale: 1.45,
+      // a big man, not a scaled-up pupil: heavier frame, relatively smaller head, weathered face
+      build: 1.3,
+      headScale: 0.9,
+      face: { broad: 0.85, old: 0.4, nose: 0.5 },
       beard: true,
       style: "long",
     });

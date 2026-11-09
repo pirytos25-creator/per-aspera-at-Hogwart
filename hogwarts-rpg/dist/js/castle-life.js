@@ -85,7 +85,8 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
   const gloves=[-1,1].map(s=>{const g=new T.Mesh(new T.SphereGeometry(.09,12,8),new T.MeshStandardMaterial({color:'#efeae0',roughness:.7}));g.scale.set(1,1.3,.7);root.add(g);return g;});
   const N=90,pos=new Float32Array(N*3),seeds=[];for(let i=0;i<N;i++)seeds.push([Math.random()*6.28,Math.random()*.5+.15,Math.random()*.6-.45,Math.random()*2+1]);
   const dg=new T.BufferGeometry();dg.setAttribute('position',new T.BufferAttribute(pos,3));
-  const dust=new T.Points(dg,new T.PointsMaterial({color:'#efeae4',size:.06,transparent:true,opacity:.75,depthWrite:false,blending:T.AdditiveBlending}));dust.frustumCulled=false;root.add(dust);
+  const dot=(()=>{const c=document.createElement('canvas');c.width=c.height=32;const x=c.getContext('2d'),g=x.createRadialGradient(16,16,0,16,16,16);g.addColorStop(0,'#fff');g.addColorStop(.45,'#ffffffaa');g.addColorStop(1,'#fff0');x.fillStyle=g;x.fillRect(0,0,32,32);return new T.CanvasTexture(c);})();
+  const dust=new T.Points(dg,new T.PointsMaterial({color:'#efeae4',map:dot,size:.05,transparent:true,opacity:.8,depthWrite:false,blending:T.AdditiveBlending}));dust.frustumCulled=false;root.add(dust);
   root.position.set(90,FLOORS.F1+2.4,0);
   // the glow borrows a light from the castle's fixed pool, so showing or hiding Szelma never recompiles shaders
   const glow={pos:root.position,color:'#dfe8ff',intensity:0,distance:6,band:'F1'};castle.anchors.push(glow);
@@ -172,7 +173,9 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
    if(s.state==='wander'){if(s.timer<=0||s.pos.distanceTo(s.goal)<.5){s.goal.set(20+Math.random()*120,FLOORS.F1+2+Math.random()*1.5,(Math.random()-.5)*4);s.timer=4+Math.random()*4;}
     if(pd<11&&Math.abs(playerPos.y-FLOORS.F1)<2&&s.prankT<=0){s.state='tease';s.timer=7;bark(null,'Szelma',rnd(['Hi-hi! Zgubiłeś się, adepcie?','Kreda dla pilnego ucznia!','Uuuu, nowa twarz na korytarzu!']));audio.note(990,.25,'triangle',.02);}}
    else if(s.state==='tease'){
-    s.goal.set(playerPos.x+Math.sin(time*.8)*3.5,FLOORS.F1+2.1+Math.sin(time*2)*.3,playerPos.z+Math.cos(time*.8)*1.2);
+    // tease from in front of the player, where the camera can see it (never between the lens and you)
+    const f=player.root.rotation.y,sway=Math.sin(time*.9)*1.6;
+    s.goal.set(playerPos.x+Math.sin(f)*3.4+Math.cos(f)*sway,FLOORS.F1+2.1+Math.sin(time*2)*.3,playerPos.z+Math.cos(f)*3.4-Math.sin(f)*sway);
     if(s.prankT<=0){s.prankT=7+Math.random()*6;
      if(Math.random()<.6){const from=s.pos.clone(),to=playerPos.clone().add(V(0,1.1,0));effects.projectile(from,to.clone().addScaledVector(to.clone().sub(from).normalize(),4),{color:'#f4efe2',hostile:true,damage:0,speed:11});}
      else douse?.(s.pos);
