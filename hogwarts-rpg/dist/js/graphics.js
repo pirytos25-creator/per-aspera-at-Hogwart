@@ -1,25 +1,26 @@
-import * as THREE from '../assets/three.module.js';
-import { EffectComposer } from '../assets/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from '../assets/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from '../assets/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from '../assets/addons/postprocessing/OutputPass.js';
-import { SSAOPass } from '../assets/addons/postprocessing/SSAOPass.js';
+import * as THREE from "../assets/three.module.js";
+import { EffectComposer } from "../assets/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "../assets/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "../assets/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "../assets/addons/postprocessing/OutputPass.js";
+import { SSAOPass } from "../assets/addons/postprocessing/SSAOPass.js";
+import { BokehPass } from "../assets/addons/postprocessing/BokehPass.js";
 
 const PRESETS = {
-  ultra: { dpr: 2, samples: 4, aoScale: .8, ao: true, pixels: 6500000 },
-  high: { dpr: 1.5, samples: 2, aoScale: .62, ao: true, pixels: 4000000 },
-  balanced: { dpr: 1, samples: 0, aoScale: .5, ao: false, pixels: 2200000 }
+  ultra: { dpr: 2, samples: 4, aoScale: 0.8, ao: true, pixels: 6500000 },
+  high: { dpr: 1.5, samples: 2, aoScale: 0.62, ao: true, pixels: 4000000 },
+  balanced: { dpr: 1, samples: 0, aoScale: 0.5, ao: false, pixels: 2200000 },
 };
 
 // The depth-only pass must not treat window glass, water or sky as solid walls.
 class ContactShadowsPass extends SSAOPass {
   overrideVisibility() {
     super.overrideVisibility();
-    this.scene.traverse(object => {
+    this.scene.traverse((object) => {
       if (object.userData?.skipAO || object.userData?.excludeAO || object.isWater) object.visible = false;
       if (!object.isMesh) return;
       const materials = Array.isArray(object.material) ? object.material : [object.material];
-      if (materials.some(material => material && (material.depthWrite === false || (material.transparent && material.opacity < .85)))) {
+      if (materials.some((material) => material && (material.depthWrite === false || (material.transparent && material.opacity < 0.85)))) {
         object.visible = false;
       }
     });
@@ -30,17 +31,23 @@ class ContactShadowsPass extends SSAOPass {
     // a second time with an override normal material.
     const autoUpdate = renderer.shadowMap.autoUpdate;
     renderer.shadowMap.autoUpdate = false;
-    try { super.render(renderer, ...args); }
-    finally { renderer.shadowMap.autoUpdate = autoUpdate; }
+    try {
+      super.render(renderer, ...args);
+    } finally {
+      renderer.shadowMap.autoUpdate = autoUpdate;
+    }
   }
 }
 
 /** HDR lighting, contact shadows, restrained light bloom and final ACES output. */
 export function createGraphics(renderer, scene, camera) {
   const dimensions = renderer.getSize(new THREE.Vector2());
-  let width = Math.max(1, dimensions.x), height = Math.max(1, dimensions.y);
-  let quality = 'ultra', interior = false, disposed = false;
-  const hdr = renderer.extensions.has('EXT_color_buffer_float');
+  let width = Math.max(1, dimensions.x),
+    height = Math.max(1, dimensions.y);
+  let quality = "ultra",
+    interior = false,
+    disposed = false;
+  const hdr = renderer.extensions.has("EXT_color_buffer_float");
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
@@ -49,24 +56,28 @@ export function createGraphics(renderer, scene, camera) {
     minFilter: THREE.LinearFilter,
     magFilter: THREE.LinearFilter,
     depthBuffer: true,
-    stencilBuffer: false
+    stencilBuffer: false,
   });
-  target.texture.name = 'Hogwarts HDR colour';
+  target.texture.name = "Hogwarts HDR colour";
   const composer = new EffectComposer(renderer, target);
   const beauty = new RenderPass(scene, camera);
   const contact = new ContactShadowsPass(scene, camera, width, height, 24);
   contact.output = SSAOPass.OUTPUT.Default;
   // Keep detail in recesses without turning every corner black.
-  contact.ssaoMaterial.uniforms.uContactStrength = { value: .58 };
+  contact.ssaoMaterial.uniforms.uContactStrength = { value: 0.58 };
   contact.ssaoMaterial.fragmentShader = contact.ssaoMaterial.fragmentShader
-    .replace('uniform float kernelRadius;', 'uniform float uContactStrength;\nuniform float kernelRadius;')
-    .replace('vec3( 1.0 - occlusion )', 'vec3( 1.0 - occlusion * uContactStrength )');
+    .replace("uniform float kernelRadius;", "uniform float uContactStrength;\nuniform float kernelRadius;")
+    .replace("vec3( 1.0 - occlusion )", "vec3( 1.0 - occlusion * uContactStrength )");
   contact.ssaoMaterial.needsUpdate = true;
 
-  const bloom = new UnrealBloomPass(new THREE.Vector2(width, height), .28, .55, hdr ? 1.12 : .85);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(width, height), 0.28, 0.55, hdr ? 1.12 : 0.85);
   const output = new OutputPass();
+  // Cinematic depth of field for conversations (off during play).
+  const dof = new BokehPass(scene, camera, { focus: 2, aperture: 0.004, maxblur: 0.008 });
+  dof.enabled = false;
   composer.addPass(beauty);
   composer.addPass(contact);
+  composer.addPass(dof);
   composer.addPass(bloom);
   composer.addPass(output);
 
@@ -75,41 +86,42 @@ export function createGraphics(renderer, scene, camera) {
     // SSAOPass depth differences are normalised to the camera clipping range,
     // while its sampling radius is in world units.
     contact.kernelRadius = interior ? 1.05 : 5.2;
-    contact.minDistance = (interior ? .025 : .12) / range;
+    contact.minDistance = (interior ? 0.025 : 0.12) / range;
     contact.maxDistance = (interior ? 2.1 : 13) / range;
-    contact.ssaoMaterial.uniforms.uContactStrength.value = interior ? .48 : .6;
+    contact.ssaoMaterial.uniforms.uContactStrength.value = interior ? 0.48 : 0.6;
     contact.ssaoMaterial.uniforms.cameraNear.value = camera.near;
     contact.ssaoMaterial.uniforms.cameraFar.value = camera.far;
     contact.depthRenderMaterial.uniforms.cameraNear.value = camera.near;
     contact.depthRenderMaterial.uniforms.cameraFar.value = camera.far;
     contact.ssaoMaterial.uniforms.cameraProjectionMatrix.value.copy(camera.projectionMatrix);
     contact.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value.copy(camera.projectionMatrixInverse);
-    bloom.strength = interior ? .24 : .28;
-    bloom.radius = interior ? .42 : .55;
-    bloom.threshold = hdr ? (interior ? 1.25 : 1.12) : .85;
+    bloom.strength = interior ? 0.24 : 0.28;
+    bloom.radius = interior ? 0.42 : 0.55;
+    bloom.threshold = hdr ? (interior ? 1.25 : 1.12) : 0.85;
   }
 
   function resize(w = width, h = height) {
     if (disposed) return;
-    width = Math.max(1, Math.floor(w)); height = Math.max(1, Math.floor(h));
+    width = Math.max(1, Math.floor(w));
+    height = Math.max(1, Math.floor(h));
     const preset = PRESETS[quality];
-    const device = typeof window === 'undefined' ? 1 : window.devicePixelRatio || 1;
+    const device = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
     const pixelRatio = Math.min(device, preset.dpr, Math.sqrt(preset.pixels / (width * height)));
-    renderer.setPixelRatio(Math.max(.65, pixelRatio));
+    renderer.setPixelRatio(Math.max(0.65, pixelRatio));
     renderer.setSize(width, height);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(width, height);
     contact.enabled = preset.ao && hdr;
     contact.setSize(
       Math.max(1, Math.round(width * renderer.getPixelRatio() * preset.aoScale)),
-      Math.max(1, Math.round(height * renderer.getPixelRatio() * preset.aoScale))
+      Math.max(1, Math.round(height * renderer.getPixelRatio() * preset.aoScale)),
     );
     refreshContact();
   }
 
   function setQuality(next) {
     if (disposed) return;
-    quality = Object.hasOwn(PRESETS, next) ? next : 'ultra';
+    quality = Object.hasOwn(PRESETS, next) ? next : "ultra";
     const samples = Math.min(PRESETS[quality].samples, renderer.capabilities.maxSamples || 4);
     for (const buffer of [composer.renderTarget1, composer.renderTarget2]) {
       if (buffer.samples !== samples) {
@@ -120,7 +132,7 @@ export function createGraphics(renderer, scene, camera) {
     resize();
   }
 
-  setQuality('ultra');
+  setQuality("ultra");
   return {
     render(dt = 0) {
       if (disposed) return;
@@ -131,9 +143,22 @@ export function createGraphics(renderer, scene, camera) {
     },
     resize,
     setQuality,
-    setInterior(value) { interior = Boolean(value); refreshContact(); },
-    get quality() { return quality; },
-    get hasHDR() { return hdr; },
+    setDOF(enabled, focus = 2, aperture = 0.004, maxblur = 0.008) {
+      dof.enabled = !!enabled && quality !== "balanced";
+      dof.uniforms.focus.value = focus;
+      dof.uniforms.aperture.value = aperture;
+      dof.uniforms.maxblur.value = maxblur;
+    },
+    setInterior(value) {
+      interior = Boolean(value);
+      refreshContact();
+    },
+    get quality() {
+      return quality;
+    },
+    get hasHDR() {
+      return hdr;
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -145,31 +170,66 @@ export function createGraphics(renderer, scene, camera) {
       bloom.dispose();
       output.dispose();
       composer.dispose();
-    }
+    },
   };
 }
 
 const SKY_STATES = [
-  { zenith: '#3c6684', horizon: '#bac9bd', low: '#899d98', cloud: '#b9c1b6', sun: '#ffdfac', direction: [-.72, .27, .39], night: 0, brightness: .92 },
-  { zenith: '#071225', horizon: '#273e57', low: '#172c3c', cloud: '#354c62', sun: '#cddffa', direction: [-.35, .49, -.68], night: 1, brightness: .64 },
-  { zenith: '#5a8cb9', horizon: '#d1dace', low: '#9eb6b9', cloud: '#e5e7da', sun: '#ffedce', direction: [.7, .34, -.4], night: 0, brightness: 1.08 }
+  {
+    zenith: "#3c6684",
+    horizon: "#bac9bd",
+    low: "#899d98",
+    cloud: "#b9c1b6",
+    sun: "#ffdfac",
+    direction: [-0.72, 0.27, 0.39],
+    night: 0,
+    brightness: 0.92,
+  },
+  {
+    zenith: "#071225",
+    horizon: "#273e57",
+    low: "#172c3c",
+    cloud: "#354c62",
+    sun: "#cddffa",
+    direction: [-0.35, 0.49, -0.68],
+    night: 1,
+    brightness: 0.64,
+  },
+  {
+    zenith: "#5a8cb9",
+    horizon: "#d1dace",
+    low: "#9eb6b9",
+    cloud: "#e5e7da",
+    sun: "#ffedce",
+    direction: [0.7, 0.34, -0.4],
+    night: 0,
+    brightness: 1.08,
+  },
 ];
 
 /** A distant atmospheric dome: layered cirrus, haze, solar glow and moonlight. */
 export function createSky(scene) {
   const group = new THREE.Group();
-  group.name = 'Atmosphere · layered clouds and horizon';
+  group.name = "Atmosphere · layered clouds and horizon";
   group.userData.skipAO = true;
   const uniforms = {
-    uZenith: { value: new THREE.Color() }, uHorizon: { value: new THREE.Color() },
-    uLow: { value: new THREE.Color() }, uCloud: { value: new THREE.Color() },
-    uSun: { value: new THREE.Color() }, uSunDirection: { value: new THREE.Vector3() },
-    uNight: { value: 0 }, uTime: { value: 0 }, uBrightness: { value: 1 }
+    uZenith: { value: new THREE.Color() },
+    uHorizon: { value: new THREE.Color() },
+    uLow: { value: new THREE.Color() },
+    uCloud: { value: new THREE.Color() },
+    uSun: { value: new THREE.Color() },
+    uSunDirection: { value: new THREE.Vector3() },
+    uNight: { value: 0 },
+    uTime: { value: 0 },
+    uBrightness: { value: 1 },
   };
   const geometry = new THREE.SphereGeometry(1800, 48, 32);
   const material = new THREE.ShaderMaterial({
-    name: 'Scottish highlands atmosphere', side: THREE.BackSide,
-    depthWrite: false, depthTest: false, fog: false,
+    name: "Scottish highlands atmosphere",
+    side: THREE.BackSide,
+    depthWrite: false,
+    depthTest: false,
+    fog: false,
     uniforms,
     vertexShader: `
       varying vec3 vDirection;
@@ -238,10 +298,10 @@ export function createSky(scene) {
         sky=mix(sky,litCloud*1.07,wispy);
         gl_FragColor=vec4(max(vec3(0.0),sky*uBrightness),1.0);
       }
-    `
+    `,
   });
   const dome = new THREE.Mesh(geometry, material);
-  dome.name = 'Atmospheric sky dome';
+  dome.name = "Atmospheric sky dome";
   dome.frustumCulled = false;
   dome.renderOrder = -1000;
   dome.userData.skipAO = true;
@@ -251,11 +311,20 @@ export function createSky(scene) {
   };
   group.add(dome);
   scene.add(group);
-  let current = 0, disposed = false, environmentTarget = null;
+  let current = 0,
+    disposed = false,
+    environmentTarget = null;
   function setTime(index) {
     current = SKY_STATES[index] ? index : 0;
     const state = SKY_STATES[current];
-    for (const [key, value] of [['uZenith',state.zenith],['uHorizon',state.horizon],['uLow',state.low],['uCloud',state.cloud],['uSun',state.sun]]) uniforms[key].value.set(value);
+    for (const [key, value] of [
+      ["uZenith", state.zenith],
+      ["uHorizon", state.horizon],
+      ["uLow", state.low],
+      ["uCloud", state.cloud],
+      ["uSun", state.sun],
+    ])
+      uniforms[key].value.set(value);
     uniforms.uSunDirection.value.set(...state.direction).normalize();
     uniforms.uNight.value = state.night;
     uniforms.uBrightness.value = state.brightness;
@@ -264,8 +333,12 @@ export function createSky(scene) {
   return {
     group,
     setTime,
-    update(time) { if (!disposed) uniforms.uTime.value = Number.isFinite(time) ? time : 0; },
-    setInterior(value) { group.visible = !value; },
+    update(time) {
+      if (!disposed) uniforms.uTime.value = Number.isFinite(time) ? time : 0;
+    },
+    setInterior(value) {
+      group.visible = !value;
+    },
     createEnvironment(renderer) {
       if (disposed) return null;
       // Call once after creation (and optionally when the time of day changes).
@@ -275,13 +348,22 @@ export function createSky(scene) {
       captureDome.frustumCulled = false;
       captureScene.add(captureDome);
       const generator = new THREE.PMREMGenerator(renderer);
-      const next = generator.fromScene(captureScene, .025, .1, 2200);
+      const next = generator.fromScene(captureScene, 0.025, 0.1, 2200);
       generator.dispose();
       environmentTarget?.dispose();
       environmentTarget = next;
       return next.texture;
     },
-    get timeMode() { return current; },
-    dispose() { if (disposed) return; disposed = true; scene.remove(group); geometry.dispose(); material.dispose(); environmentTarget?.dispose(); }
+    get timeMode() {
+      return current;
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      scene.remove(group);
+      geometry.dispose();
+      material.dispose();
+      environmentTarget?.dispose();
+    },
   };
 }
