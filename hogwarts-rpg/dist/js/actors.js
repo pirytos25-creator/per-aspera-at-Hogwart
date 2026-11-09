@@ -53,7 +53,9 @@ const HAIR={short:'Hair_Short',long:'Hair_Long',bun:'Hair_Bun',pony:'Hair_Pony',
 const TINT={M_Skin:'skin',M_Hair:'hair',M_Robe:'robe',M_Iris:'eyes'};
 const shared=new Map();
 let clothTexture,shadowTexture,CAMERA=null,LOD_DISTANCE=13;
-export function setActorCamera(camera){CAMERA=camera;}
+// characters are drawn on their own layer: the baked sun shadows skip them, char-shadows.js draws theirs live
+export const ACTOR_LAYER=2;
+export function setActorCamera(camera){CAMERA=camera;camera.layers.enable(ACTOR_LAYER);}
 export function setActorQuality(q){LOD_DISTANCE=q==='ultra'?20:q==='high'?14:9;}
 function fabric(){
  if(clothTexture)return clothTexture;
@@ -113,7 +115,7 @@ export function createActor(options={}){
   o.userData.wanted=show;o.userData.base=base;lod[isLod?1:0].push(o);
   o.traverse(m=>{
    if(!m.isMesh)return;
-   m.receiveShadow=true;m.castShadow=!isLod;
+   m.receiveShadow=true;m.castShadow=!isLod;m.layers.set(ACTOR_LAYER);
    const swap=mt=>{
     if(mt.name==='M_Lining'){if(!accent){accent=upgrade(mt,null).clone();accent.color.set(color);}return accent;}
     const k=TINT[mt.name];return upgrade(mt,k?colours[k]:null);

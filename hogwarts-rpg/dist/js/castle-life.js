@@ -69,8 +69,10 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
   const g=make({id:'ghost-leokadia',name:'Pani Leokadia · duch',role:'DUCH ZAMKU',band:'F2',mood:'kind',look:{color:'#9fb6c8',robe:'#a9bfd0',skin:'#d8e6ee',hair:'#e2ecf2',style:'bun',hat:true,face:{old:.6,soft:.8}},
    lines:['Kiedyś uczyłam tu kaligrafii. Atrament był wtedy gęstszy, a korytarze krótsze.','Ściany? Och, kochanie, dla mnie to tylko uprzejme sugestie.','Jeśli zgubisz drogę, idź za zapachem pergaminu. Biblioteka zawsze przyciąga zagubionych.']},V(0,FLOORS.F2+.25,-40));
   g.ghost=true;ghost=g;
-  g.actor.root.traverse(o=>{if(o.isMesh){const m=new T.MeshStandardMaterial({color:'#b8d8ee',emissive:'#5f90b8',emissiveIntensity:.7,transparent:true,opacity:.42,depthWrite:false,roughness:.4});o.material=Array.isArray(o.material)?o.material.map(()=>m):m;o.castShadow=false;}});
-  g.actor.root.children.filter(c=>c.isMesh&&c.material?.map).forEach(c=>c.visible=false);
+  // a ghost casts no shadow: hide the blob under its feet and make the body translucent
+  g.actor.root.children.filter(c=>c.isMesh).forEach(c=>c.visible=false);
+  const ghostMat=new T.MeshStandardMaterial({color:'#b8d8ee',emissive:'#5f90b8',emissiveIntensity:.7,transparent:true,opacity:.42,depthWrite:false,roughness:.4});
+  g.actor.rig.traverse(o=>{if(o.isMesh&&o!==g.actor.tip){o.material=Array.isArray(o.material)?o.material.map(()=>ghostMat):ghostMat;o.castShadow=false;o.layers.set(0);}});
  }
  // ---------------------------------------------------------------- Szelma, the chalk spirit (original design)
  {

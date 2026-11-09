@@ -11,7 +11,7 @@ export function createCameraRig(camera,graphics){
  const pos=V(),look=V(),tmp=V(),tmp2=V();
  const bars=document.createElement('div');bars.id='letterbox';bars.innerHTML='<i></i><i></i>';document.body.append(bars);
  // ---------------------------------------------------------------- conversation director
- const talk={active:false,npc:null,player:null,side:1,shot:'two',t:0,shotT:0,from:V(),to:V(),fov:38,drift:V(),focus:2,lines:0,blocked:null};
+ const talk={active:false,npc:null,player:null,side:1,shot:'two',t:0,shotT:0,from:V(),to:V(),fov:38,drift:V(),focus:2,lines:0,blocked:null,shift:0,lift:0};
  // eye level: the head bone sits at the base of the skull, the eyes ~13 cm above it
  function headOf(actor,out){if(!actor.head)return out.copy(actor.root.position).add(new T.Vector3(0,1.6,0));actor.head.getWorldPosition(out);return out.addScaledVector(UP,.12*actor.root.scale.y);}
  function pickSide(playerPos,npcPos){
@@ -27,11 +27,17 @@ export function createCameraRig(camera,graphics){
   const from=V(),to=V();let fov=36,focus=1.5;
   if(kind==='npc'){from.copy(P).addScaledVector(axis,-.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(N).addScaledVector(side,-.12).addScaledVector(UP,-.05);fov=34;}
   else if(kind==='player'){from.copy(N).addScaledVector(axis,.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(P).addScaledVector(side,-.12).addScaledVector(UP,-.05);fov=34;}
+  // lesson shots: a medium frame that shows the wand arm (demo = the teacher, practice = you)
+  else if(kind==='demo'){from.copy(P).addScaledVector(axis,-.1).addScaledVector(side,.95).addScaledVector(UP,-.05);to.copy(N).addScaledVector(UP,-.3);fov=36;}
+  else if(kind==='practice'){from.copy(N).addScaledVector(axis,.1).addScaledVector(side,.95).addScaledVector(UP,-.05);to.copy(P).addScaledVector(UP,-.3);fov=36;}
   else if(kind==='close'){from.copy(N).addScaledVector(axis,-1.05).addScaledVector(side,.32).addScaledVector(UP,.02);to.copy(N).addScaledVector(UP,-.03);fov=27;}
   else{const mid=V().copy(P).lerp(N,.5);from.copy(mid).addScaledVector(side,Math.max(2.2,d*1.25)).addScaledVector(axis,-d*.18).addScaledVector(UP,.05);to.copy(mid).addScaledVector(UP,-.12);fov=40;}
-  focus=from.distanceTo(kind==='player'?P:kind==='two'?V().copy(P).lerp(N,.5):N);
+  focus=from.distanceTo(kind==='player'||kind==='practice'?P:kind==='two'?V().copy(P).lerp(N,.5):N);
+  aim(from,to);
   return {from,to,fov,focus};
  }
+ // keep the subject clear of an overlay: aim a little to the side (shift) or above (lift)
+ function aim(from,to){if(talk.shift){const d=V().copy(to).sub(from);d.y=0;d.normalize();to.addScaledVector(V().set(-d.z,0,d.x),-talk.shift);}if(talk.lift)to.addScaledVector(UP,talk.lift);return to;}
  function cut(kind){
   let f=framing(kind);
   // never put the lens inside a wall: try the other side, then pull in closer
@@ -82,16 +88,18 @@ export function createCameraRig(camera,graphics){
    document.body.classList.add('cinematic');
    cut('two');
   },
-  npcLine(emphasis=false){if(!talk.active)return;talk.lines++;cut(emphasis?'close':talk.lines===1&&talk.shot==='two'?'npc':(talk.lines%3===0?'close':'npc'));},
-  playerLine(){if(talk.active)cut('player');},
-  endDialogue(){if(!talk.active)return;talk.active=false;talk.wasActive=true;document.body.classList.remove('cinematic');graphics?.setDOF(false);camera.fov=state.fov;camera.updateProjectionMatrix();},
+  npcLine(emphasis=false){if(!talk.active)return;talk.shift=talk.lift=0;talk.lines++;cut(emphasis?'close':talk.lines===1&&talk.shot==='two'?'npc':(talk.lines%3===0?'close':'npc'));},
+  shot(kind,{shift=0,lift=0}={}){if(!talk.active)return;talk.shift=shift;talk.lift=lift;cut(kind);},
+  playerLine(){if(!talk.active)return;talk.shift=talk.lift=0;cut('player');},
+  endDialogue(){if(!talk.active)return;talk.active=false;talk.shift=talk.lift=0;talk.wasActive=true;document.body.classList.remove('cinematic');graphics?.setDOF(false);camera.fov=state.fov;camera.updateProjectionMatrix();},
   updateDialogue(dt){
    if(!talk.active)return;
    talk.shotT+=dt;
    // slow push-in and drift keep the frame alive between cuts
    camera.position.copy(talk.from).addScaledVector(talk.drift,Math.min(talk.shotT,6));
-   const target=talk.shot==='player'?headOf(talk.player,V()):talk.shot==='two'?headOf(talk.player,V()).lerp(headOf(talk.npc,V()),.5):headOf(talk.npc,V());
-   talk.to.lerp(target.addScaledVector(UP,talk.shot==='two'?-.12:-.04),1-Math.exp(-3*dt));
+   const k=talk.shot,target=k==='player'||k==='practice'?headOf(talk.player,V()):k==='two'?headOf(talk.player,V()).lerp(headOf(talk.npc,V()),.5):headOf(talk.npc,V());
+   target.addScaledVector(UP,k==='two'?-.12:k==='demo'||k==='practice'?-.3:-.04);aim(camera.position,target);
+   talk.to.lerp(target,1-Math.exp(-3*dt));
    camera.lookAt(talk.to);
    graphics?.setDOF(true,camera.position.distanceTo(talk.to),talk.shot==='close'?.009:.006,.009);
   }

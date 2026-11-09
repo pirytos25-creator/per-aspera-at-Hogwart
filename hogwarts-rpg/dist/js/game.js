@@ -7,11 +7,13 @@ import { createAtmosphere } from "./atmosphere.js";
 import { ROOMS } from "./data.js";
 import { ACTIVITIES, openRoomActivity, createRoomActivityProps } from "./room-activities.js";
 import { createRoomIdentity } from "./room-identity.js";
-import { createActor, createDummy, labelSprite, setActorCamera, setActorQuality } from "./actors.js";
+import { createActor, createDummy, labelSprite, setActorCamera, setActorQuality, ACTOR_LAYER } from "./actors.js";
 import { createCameraRig } from "./camera-rig.js";
 import { createDuels, DUELISTS } from "./duel.js";
 import { createCastle, CASTLE_ROOMS, FLOORS } from "./castle.js";
 import { createCastleLife } from "./castle-life.js";
+import { createLessons, PATTERNS, SPELL_PATTERN } from "./lessons.js";
+import { createCharacterShadows } from "./char-shadows.js";
 import { createEffects, createAudio } from "./effects.js";
 import {
   SAVE_KEY,
@@ -94,6 +96,25 @@ sun.shadow.bias = -0.0003;
 sun.shadow.normalBias = 0.2;
 fill.position.set(90, 80, -100);
 scene.add(hemi, sun, fill);
+// The sun's shadow map is rendered once per place. Characters live on their own layer, so it never
+// captures them (no shadow left behind where someone stood); they get live shadows of their own.
+const charShadows = createCharacterShadows(renderer, scene);
+function refreshShadows() {
+  renderer.shadowMap.needsUpdate = true;
+}
+const charDir = new T.Vector3();
+function updateCharShadows() {
+  const inside = !!room || zone === "castle";
+  // indoors the light falls from the candles and lanterns overhead; outdoors from the sun
+  if (inside) charDir.set(0.55, 1, 0.38).normalize();
+  else charDir.copy(sun.position).normalize();
+  const outdoors = ["grounds", "forest", "hogsmeade"].includes(zone);
+  charShadows.update(playerPos, charDir, floorAt(), {
+    active: playing && player.root.visible,
+    strength: inside ? 0.6 : timeMode === 1 ? 0.32 : 0.55,
+    ground: outdoors ? (x, z) => Math.max(world.groundHeight(x, z), 1) : null,
+  });
+}
 const world = createWorld();
 scene.add(world.group);
 const sky = createSky(scene),
@@ -108,7 +129,7 @@ scene.environmentIntensity = 0.38;
 let quality = state.quality;
 graphics.setQuality(quality);
 environment.setQuality(quality);
-renderer.shadowMap.needsUpdate = true;
+refreshShadows();
 const atmosphere = createAtmosphere(scene, world, renderer);
 const rig = createCameraRig(camera, graphics);
 setActorCamera(camera);
@@ -221,7 +242,7 @@ function populateCastleRoom(slot) {
   if (slot.id === "library") {
     pickup("library-chest", "chest", ...at(-10, 13));
     const [lx, lz] = at(0, -11.5);
-    const agata = npc("agata", "Agata Sowińska · bibliotekarka", lx, lz, { color: "#6d5a8a", robe: "#2a2733", hair: "#b9b4ab", style: "bun", hat: true, face: { old: 0.9, soft: 0.6, nose: 0.3 }, scale: 0.96, mood: "stern" });
+    const agata = npc("agata", "Agata Sowińska · pomocnica w bibliotece", lx, lz, { color: "#6d5a8a", robe: "#2a2733", hair: "#b9b4ab", style: "bun", hat: true, face: { old: 0.9, soft: 0.6, nose: 0.3 }, scale: 0.96, mood: "stern" });
     agata.actor.root.rotation.y = slot.ry;
     agata.actor.read(true);
   }
@@ -272,6 +293,7 @@ function bark(actor, name, text) {
   barkTimer = setTimeout(() => barkEl.classList.remove("visible"), 1200 + seconds * 1000);
 }
 const ARENA = { center: new T.Vector3(23, 26.4, 20.6), axis: new T.Vector3(1, 0, 0), half: 7.5, width: 3.6 };
+const lessons = createLessons({ scene, audio });
 const duels = createDuels({
   scene,
   effects,
@@ -707,7 +729,7 @@ function setLighting() {
   sun.intensity = inside ? 0.65 : timeMode === 1 ? 0.6 : 3.6;
   fill.intensity = inside ? 0.6 : 1;
   renderer.toneMappingExposure = inside ? 1.25 : 1.22;
-  renderer.shadowMap.needsUpdate = true;
+  refreshShadows();
 }
 function switchZone(destination, arrive = null) {
   clearZone();
@@ -778,7 +800,7 @@ function switchZone(destination, arrive = null) {
   record(state, "visited", destination);
   refreshHUD();
   updateCamera(0.016, true);
-  renderer.shadowMap.needsUpdate = true;
+  refreshShadows();
 }
 function travel(destination, arrive = null) {
   if (CASTLE_ROOMS.has(destination)) {
@@ -882,6 +904,7 @@ function releasePointer() {
 }
 let dialogueLine = null;
 function closeDialogue() {
+  lessons.cancel();
   dialogueNpc?.actor?.stopSpeaking?.();
   dialogueNpc?.actor?.setExpression?.("neutral");
   player.stopSpeaking?.();
@@ -924,13 +947,15 @@ function chooseLine(choice) {
   }, Math.min(1700, 350 + seconds * 900));
 }
 function say(npc, role, text, choices) {
-  if ((room || zone === "castle") && ACTIVITIES[roomId] && ["teacher", "flitwick", "snape", "dumbledore"].includes(npc.id))
+  const here = npc.slotRoom || roomId;
+  if ((room || zone === "castle") && ACTIVITIES[here] && ["teacher", "flitwick", "snape", "dumbledore"].includes(npc.id) && !choices.some((c) => c.lesson))
     choices = [
       ...choices.slice(0, -1),
-      { text: "Rozpocznij ćwiczenie: " + ACTIVITIES[roomId].title, action: showCurrentActivity },
+      { text: "Rozpocznij ćwiczenie: " + ACTIVITIES[here].title, action: showCurrentActivity },
       choices.at(-1),
     ];
-  if (npc.lesson && !choices.some((c) => c.lesson)) choices = [...choices.slice(0, -1), npc.lesson, choices.at(-1)];
+  const offer = lessonOffer(npc, role);
+  if (offer && !choices.some((c) => c.lesson)) choices = [...choices.slice(0, -1), offer, choices.at(-1)];
   releasePointer();
   const first = !dialogueNpc;
   dialogueNpc = npc;
@@ -1030,10 +1055,13 @@ function talk(n) {
             if (state.stage === 0) {
               toast("Najpierw porozmawiaj z profesor McGonagall na dziedzińcu.");
               closeDialogue();
-            } else if (state.stage === 1) {
-              complete(1);
-              closeDialogue();
-            } else
+            } else if (state.stage === 1)
+              // the first lesson: the professor shows the movement, you repeat it on the slate
+              spellLesson(n, "MISTRZ ZAKLĘĆ", "leviosa", () => {
+                complete(1);
+                closeDialogue();
+              });
+            else
               say(
                 n,
                 "TRENING",
@@ -1091,7 +1119,7 @@ function talk(n) {
     );
   else if (n.life) say(n, n.role || "UCZEŃ HOGWARTU", n.lines[Math.floor(Math.random() * n.lines.length)], [leave]);
   else if (n.id === "agata")
-    say(n, "BIBLIOTEKARKA", "Cisza, proszę. Książki wracają na półki w tym samym stanie, w jakim je wypożyczono. A strony przewodnika po zamku? Kto je znajdzie, ten wie o Hogwarcie więcej niż niejeden prefekt.", [leave]);
+    say(n, "POMOCNICA W BIBLIOTECE", "Cisza, proszę. Książki wracają na półki w tym samym stanie, w jakim je wypożyczono. A strony przewodnika po zamku? Kto je znajdzie, ten wie o Hogwarcie więcej niż niejeden prefekt.", [leave]);
   else if (n.id === "wrzos") {
     const tips = { text: "Jak wygrać pojedynek?", action: () => say(n, "MISTRZ POJEDYNKÓW", "Nie stój w miejscu. Alt z kierunkiem to unik w bok, Protego odbija cios, a mocne Expelliarmus potrafi powalić. Kiedy przeciwnik unosi różdżkę, masz pół sekundy. Obserwuj jego rękę, nie twarz.", [leave]) };
     if (state.stage < 4)
@@ -1141,7 +1169,7 @@ function talk(n) {
       ],
     );
   else if (n.id === "teacher") {
-    const info = ROOMS.find((r) => r.id === roomId);
+    const info = ROOMS.find((r) => r.id === (n.slotRoom || roomId)) || { description: "Rozejrzyj się. Każda sala skrywa własną historię." };
     say(n, info.subject || "HOGWART", info.lesson?.intro || info.description || "Rozejrzyj się. Każda sala skrywa własną historię.", [
       {
         text: "Czego dotyczy ta sala?",
@@ -1246,6 +1274,155 @@ function damageEnemy(e, amount) {
 }
 function mastery(id) {
   return state.mastery?.[id] || 0;
+}
+// ---------------------------------------------------------------- lessons: the professor shows a wand movement, you draw it
+const stars = (n) => "★".repeat(n) + "☆".repeat(3 - n);
+const SPELL_TEACHERS = { flitwick: ["lumos", "leviosa"], wrzos: ["protego", "expelliarmus"] };
+const MASTERY_EFFECT = {
+  lumos: "Światło Lumos świeci o 6 sekund dłużej i budzi runy z większej odległości.",
+  leviosa: "Lewitacja unieruchamia przeciwnika o pół sekundy dłużej.",
+  protego: "Tarcza Protego wytrzymuje o 0,4 sekundy dłużej.",
+  expelliarmus: "Expelliarmus uderza mocniej i łatwiej powala.",
+};
+const LESSON_INTRO = {
+  lumos: "Lumos to jeden spokojny ruch w górę. Światło idzie za różdżką, nie przed nią.",
+  leviosa: "Zamach w dół i w prawo, płynnie, a na końcu lekkie pstryknięcie w górę. Bez szarpania!",
+  protego: "Tarcza rośnie razem z ruchem. Prowadź różdżkę łukiem nad głową, od lewej do prawej.",
+  expelliarmus: "Cięcie z góry w dół i krótkie pchnięcie. Szybko, ale czysto.",
+};
+function lessonOffer(n, role) {
+  if (lessons.active || !n.actor) return null;
+  const here = n.slotRoom || roomId;
+  let spells = SPELL_TEACHERS[n.id];
+  if (n.id === "teacher" && ["defence", "duelling"].includes(here)) spells = ["protego", "expelliarmus"];
+  const info = ROOMS.find((r) => r.id === here);
+  const roomOk = info?.lesson && PATTERNS[info.lesson.gesture] && ["teacher", "snape", "flitwick"].includes(n.id);
+  if (spells) return { text: "Poproszę o lekcję ruchu różdżki.", lesson: true, action: () => lessonMenu(n, role, spells, roomOk ? info : null) };
+  if (roomOk)
+    return { text: "Lekcja: " + info.lesson.title + (state.lessons[info.id] ? " · ✓" : ""), lesson: true, action: () => roomLesson(n, role, info) };
+  return null;
+}
+function lessonMenu(n, role, spells, info = null) {
+  const leave = { text: "Może innym razem.", action: closeDialogue };
+  say(
+    n,
+    role,
+    "Którego ruchu chcesz się dziś uczyć? Pokażę go powoli, a Ty powtórzysz na tabliczce. Trzy czyste próby i biegłość rośnie.",
+    [
+      ...spells.map((id) => {
+        const a = ABILITIES.find((x) => x.id === id);
+        return { text: `${a.name} · biegłość ${stars(mastery(id))}`, lesson: true, action: () => spellLesson(n, role, id) };
+      }),
+      ...(info ? [{ text: "Lekcja w tej sali: " + info.lesson.title + (state.lessons[info.id] ? " · ✓" : ""), lesson: true, action: () => roomLesson(n, role, info) }] : []),
+      leave,
+    ],
+  );
+}
+// a line spoken during the lesson, without choices
+function lessonLine(n, text) {
+  $("#speaker").textContent = n.name;
+  $("#dialogue-text").textContent = text;
+  $("#choices").innerHTML = "";
+  $("#choices").hidden = true;
+  dialogueLine = null;
+  n.actor?.say?.(text);
+}
+function runLesson(n, role, opts) {
+  $("#speaker-role").textContent = role;
+  lessonLine(n, opts.intro);
+  n.actor.setExpression?.("focus");
+  lessons.start({
+    teacher: n.actor,
+    player,
+    ...opts,
+    // medium shots that show the wand arm, aimed so the slate does not cover the person
+    shot: (who) => rig.shot(who === "teacher" ? "demo" : "practice", innerWidth > 680 ? { shift: 0.55 } : { lift: 0.5 }),
+    react: (ok, r) => {
+      n.actor.setExpression?.(ok ? "happy" : "thinking");
+      n.actor.gesture?.(ok ? "nod" : "shrug");
+      player.setExpression?.(ok ? "happy" : "worried");
+    },
+    onDone: (r) => {
+      n.actor.setExpression?.("neutral");
+      if (r.cancelled) {
+        if (r.by === "button" && dialogueNpc) say(n, role, "Wróć, kiedy zechcesz. Ruchu różdżki uczy się latami, nie minutami.", [{ text: "Do zobaczenia.", action: closeDialogue }]);
+        return;
+      }
+      opts.done(r);
+    },
+  });
+}
+function spellLesson(n, role, spell, onPass) {
+  const a = ABILITIES.find((x) => x.id === spell),
+    m = mastery(spell),
+    leave = { text: "Dziękuję za lekcję.", action: closeDialogue };
+  runLesson(n, role, {
+    patternId: SPELL_PATTERN[spell],
+    title: a.name,
+    kicker: "LEKCJA ZAKLĘĆ · BIEGŁOŚĆ " + stars(m),
+    intro: LESSON_INTRO[spell],
+    needed: onPass ? 2 : 3,
+    threshold: 0.62 + 0.06 * m,
+    ghost: m < 2,
+    done: (r) => {
+      if (r.passed) {
+        state.lessons[spell] = (state.lessons[spell] || 0) + 1;
+        state.mastery[spell] = Math.min(3, m + 1);
+        state.xp += m < 3 ? 30 : 10;
+        save();
+        refreshHUD();
+        toast(m < 3 ? `${a.name}: biegłość ${stars(state.mastery[spell])} · +30 PD` : `${a.name}: pełna biegłość · +10 PD`);
+        if (onPass) return onPass();
+        say(n, role, m < 3 ? `Doskonale! Twoja biegłość rośnie: ${stars(state.mastery[spell])}. ${MASTERY_EFFECT[spell]}` : "Perfekcyjnie. Tego ruchu nie muszę Cię już uczyć, ale ćwiczenie nigdy nie szkodzi.", [leave]);
+      } else
+        say(n, role, `Jeszcze nie dziś. Najlepsza próba: ${Math.round(r.best * 100)}%. ${PATTERNS[SPELL_PATTERN[spell]].hint}`, [
+          { text: "Spróbuję jeszcze raz.", lesson: true, action: () => spellLesson(n, role, spell, onPass) },
+          onPass ? { text: "Poćwiczę sam.", action: () => onPass() } : leave,
+        ]);
+    },
+  });
+}
+function roomLesson(n, role, info) {
+  const L = info.lesson,
+    leave = { text: "Do zobaczenia.", action: closeDialogue };
+  say(
+    n,
+    role,
+    L.intro + " " + L.question,
+    [
+      ...L.choices.map((c, i) => ({
+        text: c,
+        lesson: true,
+        action: () =>
+          i === L.answer
+            ? say(n, role, "Właśnie tak. Teraz ruch różdżki. Pokażę go powoli, a Ty powtórz na tabliczce.", [{ text: "Jestem gotowy.", lesson: true, action: () => roomGesture(n, role, info) }, leave])
+            : say(n, role, "Nie do końca. Pomyśl jeszcze raz o tym, co przed chwilą powiedziałem.", [{ text: "Spróbuję ponownie.", lesson: true, action: () => roomLesson(n, role, info) }, leave]),
+      })),
+      leave,
+    ],
+  );
+}
+function roomGesture(n, role, info) {
+  const L = info.lesson;
+  runLesson(n, role, {
+    patternId: L.gesture,
+    title: L.title,
+    kicker: "LEKCJA · " + info.name.toUpperCase(),
+    intro: "Patrz na różdżkę. " + PATTERNS[L.gesture].hint,
+    needed: 2,
+    threshold: 0.6,
+    done: (r) => {
+      if (r.passed) {
+        const first = !state.lessons[info.id];
+        state.lessons[info.id] = (state.lessons[info.id] || 0) + 1;
+        if (first) state.xp += 20;
+        save();
+        refreshHUD();
+        if (first) toast("Lekcja zaliczona: " + L.title + " · +20 PD");
+        say(n, role, L.success, [{ text: "Dziękuję.", action: closeDialogue }]);
+      } else say(n, role, "Ruch wymaga jeszcze pracy. Spróbuj ponownie, kiedy ręka odpocznie.", [{ text: "Spróbuję teraz.", lesson: true, action: () => roomGesture(n, role, info) }, { text: "Do zobaczenia.", action: closeDialogue }]);
+    },
+  });
 }
 function flashSpell(color, k = 1) {
   flash = Math.max(flash, k);
@@ -1814,6 +1991,7 @@ function showJournal(tab = "quests") {
     ["talents", "Talenty"],
     ["inventory", "Ekwipunek"],
     ["spells", "Zaklęcia"],
+    ["lessons", "Lekcje"],
   ]
     .map(([id, name]) => `<button data-journal="${id}" class="${id === tab ? "active" : ""}">${name}</button>`)
     .join("")}</div>`;
@@ -1842,6 +2020,14 @@ function showJournal(tab = "quests") {
     content = `<h2>Torba ucznia</h2><div class="stats-grid"><div><strong>${state.coins}</strong><small>GALEONY</small></div><div><strong>${state.herbs}</strong><small>LIŚCIE DITTANY</small></div><div><strong>${state.potions}</strong><small>ELIKSIRY ZDROWIA</small></div></div><div class="item-row"><span>✧</span><div><h3>Twoja różdżka</h3><p>Jesion · smocze serce · 12 cali. Stały towarzysz Twojej pierwszej przygody.</p></div></div><div class="item-row"><span>♧</span><div><h3>Eliksir zdrowia</h3><p>Przywraca 65 punktów zdrowia. Użyj R w grze. Trzy liście dittany wystarczą na jedną porcję w lochach Snape’a.</p></div></div><p>Postęp zapisuje się automatycznie w tej przeglądarce. Atlas Hogwartu ma osobny zapis.</p>`;
   if (tab === "spells")
     content = `<h2>Księga zaklęć</h2>${ABILITIES.map((a) => `<div class="item-row"><span style="font-size:30px;color:${a.color}">${a.icon}</span><div><h3>${a.name} ${unlocked(state, a.id) ? "" : "· zamknięte"}</h3><p>${a.desc}<br>${a.cost} mocy · odnowienie ${a.cooldown} s · klawisz ${a.key}</p></div></div>`).join("")}`;
+  if (tab === "lessons") {
+    const taught = ROOMS.filter((r) => r.professor && r.lesson && PATTERNS[r.lesson.gesture]);
+    content = `<h2>Lekcje i biegłość</h2><p>Profesor pokazuje ruch różdżki, a Ty powtarzasz go na tabliczce. Trzy czyste próby podnoszą biegłość zaklęcia, najwyżej do ★★★. Lumos i Leviosę ćwiczysz u mistrza zaklęć, Protego i Expelliarmus w sali obrony albo u mistrza pojedynków na dziedzińcu.</p>${ABILITIES.filter((a) => SPELL_PATTERN[a.id])
+      .map((a) => `<div class="item-row"><span style="font-size:30px;color:${a.color}">${a.icon}</span><div><h3>${a.name} <span class="mastery-stars">${stars(mastery(a.id))}</span></h3><p>Ruch: ${PATTERNS[SPELL_PATTERN[a.id]].name}. ${MASTERY_EFFECT[a.id] || ""} Ukończone lekcje: ${state.lessons[a.id] || 0}.</p></div></div>`)
+      .join("")}<h3 class="lesson-sub">Lekcje w salach · ${taught.filter((r) => state.lessons[r.id]).length} / ${taught.length}</h3><div class="room-grid">${taught
+      .map((r) => `<button data-practice-room="${r.id}"><span class="practice-status">${state.lessons[r.id] ? "✓ ZALICZONA" : "DO ODBYCIA"}</span>${safe(r.lesson.title)}<small>${safe(r.name)} · ${safe(r.professor)} · ruch: ${PATTERNS[r.lesson.gesture].name}</small></button>`)
+      .join("")}</div>`;
+  }
   panel(tabs + content, "DZIENNIK · " + state.name.toUpperCase());
   $$("[data-practice-room]").forEach((b) => (b.onclick = () => travel(b.dataset.practiceRoom)));
   $$("[data-journal]").forEach((b) => (b.onclick = () => showJournal(b.dataset.journal)));
@@ -1907,9 +2093,10 @@ function setQuality(q, announce = false) {
   environment.setQuality(q);
   atmosphere.setQuality(q);
   sun.shadow.mapSize.setScalar(q === "ultra" ? 4096 : q === "high" ? 2048 : 1024);
+  charShadows.setQuality(q);
   sun.shadow.map?.dispose();
   sun.shadow.map = null;
-  renderer.shadowMap.needsUpdate = true;
+  refreshShadows();
   if (announce) {
     save();
     toast("Grafika: " + { ultra: "Ultra", high: "Wysoka", balanced: "Płynność" }[q]);
@@ -2244,6 +2431,7 @@ function frame(now) {
       for (const n of actors) n.actor.update(wallDt, t, 0, n === dialogueNpc && n.actor.speaking?.());
     }
   }
+  lessons.update(wallDt);
   // the wand is a light source: lumos glows on the face, every spell flashes
   const lumosOn = playing && elapsed < lumosUntil;
   player.setLumos?.(lumosOn);
@@ -2271,6 +2459,7 @@ function frame(now) {
   environment.update(running ? wallDt : 0);
   sky.update(elapsed);
   atmosphere.update(running ? wallDt : 0, elapsed, playerPos);
+  updateCharShadows();
   graphics.render(wallDt);
   frames++;
   frameSeconds += wallDt;
@@ -2289,7 +2478,7 @@ function frame(now) {
   }
 }
 // test and debugging hooks (harmless in play)
-window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get state() { return state; }, get zone() { return zone; }, look };
+window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get lessons() { return lessons; }, get charShadows() { return charShadows; }, get player() { return player; }, get rig() { return rig; }, talk: (id) => talk(entities.find((e) => e.id === id)), get state() { return state; }, get zone() { return zone; }, look };
 applyPreferences();
 setQuality(quality);
 refreshHUD();
