@@ -13,7 +13,7 @@ export function createCameraRig(camera,graphics){
  // ---------------------------------------------------------------- conversation director
  const talk={active:false,npc:null,player:null,side:1,shot:'two',t:0,shotT:0,from:V(),to:V(),to0:V(),fov:38,drift:V(),focus:2,lines:0,blocked:null,shift:0,lift:0,move:null,back:null,seed:0};
  // every shot moves a little, like a camera on a slider or a slow crane: push in, arc around, never still
- const MOVES={npc:{push:.07,arc:.035},player:{push:.06,arc:-.03},close:{push:.05,arc:.05},two:{push:.02,arc:.09},demo:{push:.1,arc:.07},practice:{push:.06,arc:-.05},react:{push:.05,arc:-.04}};
+ const MOVES={npc:{push:.1,arc:.055},player:{push:.08,arc:-.05},close:{push:.08,arc:.085},two:{push:.04,arc:.12},demo:{push:.12,arc:.08},practice:{push:.08,arc:-.06},react:{push:.06,arc:-.05}};
  const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
  // eye level: the head bone sits at the base of the skull, the eyes ~13 cm above it
  function headOf(actor,out){if(!actor.head)return out.copy(actor.root.position).add(new T.Vector3(0,1.6,0));actor.head.getWorldPosition(out);return out.addScaledVector(UP,.12*actor.root.scale.y);}
@@ -104,7 +104,7 @@ export function createCameraRig(camera,graphics){
    talk.shotT+=dt;
    if(talk.back&&talk.shotT>=talk.back.at){const k=talk.back.kind;talk.back=null;cut(k);}
    // the camera glides: a slow push-in and a small arc around the subject, eased, with a breath of handheld sway
-   const m=talk.move,e=ease(Math.min(1,talk.shotT/7));
+   const m=talk.move,e=ease(Math.min(1,talk.shotT/6));
    const off=V().copy(talk.from).sub(talk.to0);
    off.applyAxisAngle(UP,m.arc*talk.side*e).multiplyScalar(1-m.push*e);
    const s=talk.seed,t=talk.shotT;

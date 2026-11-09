@@ -1002,9 +1002,15 @@ function say(npc, role, text, choices) {
   if (npc.actor) {
     npc.actor.root.rotation.y = Math.atan2(playerPos.x - npc.pos.x, playerPos.z - npc.pos.z);
     player.root.rotation.y = Math.atan2(npc.pos.x - playerPos.x, npc.pos.z - playerPos.z);
-    if (first) rig.startDialogue(player, npc.actor, { blocked: (a, b) => !!segmentBlocked(a, b, getColliders(), floorAt(), !!room || zone === "castle") });
-    const emotion = emotionFor(text, npc);
-    rig.npcLine(emotion === "worried" || emotion === "happy");
+    for (const t of dialogueTimers) clearTimeout(t);
+    dialogueTimers = [];
+    const emotion = emotionFor(text, npc),
+      emphasis = emotion === "worried" || emotion === "happy";
+    if (first) {
+      rig.startDialogue(player, npc.actor, { blocked: (a, b) => !!segmentBlocked(a, b, getColliders(), floorAt(), !!room || zone === "castle") });
+      // hold the establishing shot of both of you for a moment, then cut to the speaker
+      dialogueLater(1300, () => dialogueNpc === npc && dialogueLine?.text === text && rig.npcLine(emphasis));
+    } else rig.npcLine(emphasis);
     npc.actor.setExpression?.(emotion);
     npc.actor.lookAt?.(player.head);
     player.lookAt?.(npc.actor.head);
@@ -1012,8 +1018,6 @@ function say(npc, role, text, choices) {
     const seconds = npc.actor.say?.(text) || text.length * 0.05;
     dialogueLine = { text, t: 0, dur: seconds, choices, shown: 0 };
     // acting: a gesture that fits the line, and on long lines a cut to your reaction
-    for (const t of dialogueTimers) clearTimeout(t);
-    dialogueTimers = [];
     const line = dialogueLine;
     const gesture = /\?\s*$/.test(text) ? "shrug" : /!/.test(text) ? (emotion === "happy" ? "laugh" : "point") : emotion === "happy" || emotion === "kind" ? "nod" : emotion === "worried" ? "shrug" : emotion === "stern" ? "point" : null;
     if (gesture) dialogueLater(Math.min(seconds * 450, 2200), () => dialogueNpc === npc && npc.actor.gesture?.(gesture));
