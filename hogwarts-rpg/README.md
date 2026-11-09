@@ -54,6 +54,6 @@ Postęp jest zapisywany tylko w tej przeglądarce pod kluczem `hogwarts-rpg-v1`.
 
 ## Grafika i licencje
 
-Tryby Płynność / Wysoka / Ultra; rozdzielczość dobierana do ekranu, postprocessing, bloom, odbicia jeziora, tekstury PBR 4K, cienie, mgła, pora dnia. Przy utrzymującej się niskiej liczbie klatek tryb Wysoka automatycznie przechodzi na Płynność. Ultra wybierany ręcznie nie jest automatycznie zmieniany.
+Tryby Płynność / Wysoka / Ultra; rozdzielczość dobierana do ekranu, postprocessing, bloom, odbicia jeziora, tekstury PBR 4K, cienie, mgła, pora dnia. W trybach Wysoka i Ultra obraz przechodzi końcową korekcję (chłodne cienie, ciepłe światła, winieta, drobne ziarno, na Ultra lekka aberracja na brzegach), a postacie mają obwódkę światła w kolorze miejsca. W zamku: smugi światła z okien, witraże, poświata pochodni, kurz w powietrzu i polerowana posadzka. Przy utrzymującej się niskiej liczbie klatek tryb Wysoka automatycznie przechodzi na Płynność. Ultra wybierany ręcznie nie jest automatycznie zmieniany.
 
 Tekstury Poly Haven (CC0), lokalne licencje w `dist/assets`: Three.js (MIT), Cormorant (OFL). Dialogi i zadania są autorskie. Projekt jest nieoficjalną fanowską interpretacją świata Harry'ego Pottera.
