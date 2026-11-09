@@ -7,95 +7,140 @@
 :root{--ink:#f1efe6;--muted:#aab2b6;--gold:#c9b17c}
 *{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#0c1117;color:var(--ink);font:400 15px/1.5 'Segoe UI',system-ui,sans-serif}
 canvas{display:block}
-header{position:fixed;top:22px;left:28px;pointer-events:none}
+header{position:fixed;top:22px;left:28px;pointer-events:none;max-width:460px}
 header small{letter-spacing:.32em;text-transform:uppercase;color:var(--gold);font-size:11px}
 header h1{font:500 40px/1.05 Cormorant,Georgia,serif;margin:4px 0 6px}
-header p{color:var(--muted);max-width:430px;margin:0;font-size:14px}
-nav{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border:1px solid #c9b17c55;border-radius:6px;background:#0d141bd9;backdrop-filter:blur(6px)}
-nav button{min-height:40px;padding:0 14px;border:0;border-radius:4px;background:none;color:var(--muted);font:inherit;cursor:pointer;letter-spacing:.02em}
+header p{color:var(--muted);margin:0;font-size:14px}
+#groups{position:fixed;left:50%;bottom:74px;transform:translateX(-50%);display:flex;gap:4px}
+#groups button{min-height:30px;padding:0 14px;border:1px solid #c9b17c44;border-radius:20px;background:#0d141bcc;color:var(--muted);font:500 12px 'Segoe UI';letter-spacing:.12em;text-transform:uppercase;cursor:pointer}
+#groups button[aria-pressed=true]{color:#15100a;background:var(--gold);border-color:var(--gold)}
+nav{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);display:flex;gap:4px;padding:5px;border:1px solid #c9b17c55;border-radius:6px;background:#0d141bd9;backdrop-filter:blur(6px);max-width:96vw;overflow-x:auto}
+nav button{min-height:38px;padding:0 13px;border:0;border-radius:4px;background:none;color:var(--muted);font:inherit;cursor:pointer;white-space:nowrap}
 nav button:hover{color:#fff;background:#ffffff0d}
 nav button[aria-pressed=true]{color:#15100a;background:var(--gold)}
-nav button:focus-visible{outline:2px solid #f4dba4;outline-offset:2px}
-.hint{position:fixed;right:28px;top:28px;color:var(--muted);font-size:12px;text-align:right}
+button:focus-visible{outline:2px solid #f4dba4;outline-offset:2px}
+.hint{position:fixed;right:28px;top:28px;color:var(--muted);font-size:12px;text-align:right;line-height:1.7}
 .hint kbd{display:inline-block;min-width:20px;padding:1px 5px;border:1px solid #b2b9bf55;border-radius:3px;background:#0d141b;color:#e9ebed;font:500 11px 'Segoe UI'}
 .tags{position:fixed;inset:0;pointer-events:none}
-.tags span{position:absolute;transform:translate(-50%,-100%);font:500 15px Cormorant,Georgia,serif;color:#ead4a0;text-shadow:0 1px 6px #000;white-space:nowrap}
+.tags span{position:absolute;transform:translate(-50%,-100%);font:500 15px Cormorant,Georgia,serif;color:#ead4a0;text-shadow:0 1px 6px #000;white-space:nowrap;pointer-events:auto;cursor:pointer;text-align:center}
+.tags span small{display:block;font:500 10px 'Segoe UI';letter-spacing:.14em;color:#9fb0b8;text-transform:uppercase}
+#line{position:fixed;left:50%;bottom:132px;transform:translateX(-50%);max-width:640px;text-align:center;font:italic 500 22px/1.35 Cormorant,Georgia,serif;color:#f3e6c4;text-shadow:0 2px 10px #000;opacity:0;transition:opacity .3s}
 #loading{position:fixed;inset:0;display:grid;place-items:center;font:500 22px Cormorant,serif;color:var(--gold)}
 </style>
 <script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script>
 </head><body>
 <div id="loading">Przywoływanie obsady…</div>
-<header><small>Szlaki Magii · Sala Prób</small><h1>Obsada w ruchu</h1><p>Wspólny model czarodzieja z Blendera: jeden szkielet, trzy fryzury, broda i kapelusz, kolory domów. Wybierz ruch poniżej, przeciągnij myszą, by obejść scenę.</p></header>
-<div class="hint"><kbd>1</kbd>–<kbd>7</kbd> zmiana ruchu<br>przeciągnij · kółko · obrót</div>
+<header><small>Szlaki Magii · Sala Prób</small><h1>Obsada w ruchu</h1><p>Jeden szkielet z Blendera, pięć fryzur, mimika, wzrok, gesty zaklęć i reakcje. Kliknij imię, aby podejść bliżej. Przeciągnij, by obejść scenę.</p></header>
+<div class="hint"><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>T</kbd> grupy ruchów<br><kbd>1</kbd>–<kbd>9</kbd> ruch w grupie<br>przeciągnij · kółko · obrót</div>
 <div class="tags" id="tags"></div>
+<div id="line"></div>
+<div id="groups"></div>
 <nav id="modes" aria-label="Ruch postaci"></nav>
 <script type="module">
 import * as T from './assets/three.module.js';
 import {OrbitControls} from './assets/addons/controls/OrbitControls.js';
-import {createActor} from './js/actors.js';
+import {createActor,setActorCamera,setActorQuality} from './js/actors.js';
 
 const q=new URLSearchParams(location.search);
 const renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);
-renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;renderer.outputColorSpace=T.SRGBColorSpace;
 document.body.prepend(renderer.domElement);
-const scene=new T.Scene();scene.background=new T.Color('#121a22');scene.fog=new T.Fog('#121a22',14,32);
-const camera=new T.PerspectiveCamera(34,innerWidth/innerHeight,.1,80);camera.position.set(0,2.6,11.5);
-const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.05,0);controls.enableDamping=true;controls.maxPolarAngle=1.52;controls.minDistance=2.5;controls.maxDistance=20;
-scene.add(new T.HemisphereLight('#c7dbe6','#3a3226',1.6));
-const key=new T.DirectionalLight('#ffd9a0',3.2);key.position.set(-5,9,7);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-9,right:9,top:6,bottom:-4});scene.add(key);
-const rim=new T.DirectionalLight('#8fb7da',1.6);rim.position.set(6,5,-8);scene.add(rim);
-// stone dais with an inlaid ring, lit like a duelling hall
-const floor=new T.Mesh(new T.CircleGeometry(16,64),new T.MeshStandardMaterial({color:'#3a352e',roughness:.9}));floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
-const dais=new T.Mesh(new T.CylinderGeometry(7.4,7.7,.12,72),new T.MeshStandardMaterial({color:'#5d554a',roughness:.85}));dais.position.y=-.06;dais.receiveShadow=true;scene.add(dais);
-const ring=new T.Mesh(new T.TorusGeometry(6.9,.03,8,120),new T.MeshStandardMaterial({color:'#c9b17c',metalness:.8,roughness:.35,emissive:'#3a2c10'}));ring.rotation.x=Math.PI/2;ring.position.y=.012;scene.add(ring);
-for(let i=0;i<9;i++){const a=Math.PI*.5+i/8*Math.PI,l=new T.PointLight('#ffc87a',1.4,6,2);l.position.set(Math.sin(a)*8,1.7,Math.cos(a)*5.2-1.2);scene.add(l);const c=new T.Mesh(new T.SphereGeometry(.05,8,6),new T.MeshBasicMaterial({color:'#ffe2a4'}));c.position.copy(l.position);scene.add(c);}
+const scene=new T.Scene();scene.background=new T.Color('#121a22');scene.fog=new T.Fog('#121a22',16,36);
+const camera=new T.PerspectiveCamera(34,innerWidth/innerHeight,.05,80);camera.position.set(0,2.5,12.5);
+setActorCamera(camera);setActorQuality(q.get('q')||'high');
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.05,0);controls.enableDamping=true;controls.maxPolarAngle=1.52;controls.minDistance=.6;controls.maxDistance=22;
+scene.add(new T.HemisphereLight('#c7dbe6','#3a3226',1.35));
+const key=new T.DirectionalLight('#ffd9a0',3.1);key.position.set(-5,9,7);key.castShadow=true;key.shadow.mapSize.set(2048,2048);key.shadow.bias=-.0004;key.shadow.normalBias=.02;Object.assign(key.shadow.camera,{left:-10,right:10,top:6,bottom:-4});scene.add(key);
+const rim=new T.DirectionalLight('#8fb7da',1.9);rim.position.set(6,5,-8);scene.add(rim);
+const pmrem=new T.PMREMGenerator(renderer);
+{const env=new T.Scene();env.background=new T.Color('#3a4652');const l=new T.Mesh(new T.SphereGeometry(5,16,8),new T.MeshBasicMaterial({color:'#e8d2a8',side:T.BackSide}));l.scale.set(1,.4,1);l.position.y=2;env.add(l);scene.environment=pmrem.fromScene(env,.04).texture;scene.environmentIntensity=.35;}
+const floor=new T.Mesh(new T.CircleGeometry(18,64),new T.MeshStandardMaterial({color:'#3a352e',roughness:.9}));floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
+const dais=new T.Mesh(new T.CylinderGeometry(8.4,8.7,.12,72),new T.MeshStandardMaterial({color:'#5d554a',roughness:.85}));dais.position.y=-.06;dais.receiveShadow=true;scene.add(dais);
+const ring=new T.Mesh(new T.TorusGeometry(7.9,.03,8,120),new T.MeshStandardMaterial({color:'#c9b17c',metalness:.8,roughness:.35,emissive:'#3a2c10'}));ring.rotation.x=Math.PI/2;ring.position.y=.012;scene.add(ring);
+for(let i=0;i<9;i++){const a=Math.PI*.5+i/8*Math.PI,l=new T.PointLight('#ffc87a',1.4,6,2);l.position.set(Math.sin(a)*9,1.7,Math.cos(a)*5.6-1.2);scene.add(l);const c=new T.Mesh(new T.SphereGeometry(.05,8,6),new T.MeshBasicMaterial({color:'#ffe2a4'}));c.position.copy(l.position);scene.add(c);}
+// benches for the sitting poses
+const benchMat=new T.MeshStandardMaterial({color:'#4a3426',roughness:.7});
+const benches=[];
 
+// Original cast of the game: students, castle staff and visitors (names are fictional).
 const CAST=[
- ['McGonagall',{color:'#baaa70',robe:'#25473d',hat:true,hair:'#88877b',style:'bun',eyes:'#4f5f3a'}],
- ['Snape',{color:'#444b49',robe:'#182024',hair:'#171819',style:'long',skin:'#d2b39b'}],
- ['Ada',{color:'#a64a43',skin:'#78523f',style:'long',hair:'#1e1714'}],
- ['Nora',{color:'#547da9',skin:'#a6795c',style:'long',hair:'#2a1d17'}],
- ['Dumbledore',{color:'#b59a6a',hat:true,beard:true,hair:'#b6b3a7',style:'long',eyes:'#4d6d8c'}],
- ['Feliks',{color:'#c9a34f',hair:'#957044',eyes:'#3f5a72'}],
- ['Łucja',{color:'#548a73',style:'bun',hair:'#6b4630'}],
- ['Flitwick',{color:'#ac9a7b',scale:.85,beard:true,hair:'#c0b8aa'}],
- ['Hagrid',{color:'#a18460',robe:'#66503d',hair:'#493729',scale:1.45,beard:true,style:'long'}],
+ ['Nora','Ravenclaw',{color:'#547da9',skin:'#9c6d52',style:'long',hair:'#22180f',eyes:'#3b2a1d',face:{soft:1}},'Czy wiesz, że runy świecą tylko pod właściwym kątem?'],
+ ['Feliks','Hufflepuff',{color:'#c9a34f',hair:'#957044',eyes:'#3f5a72',face:{broad:.4},headScale:1.04},'Dittany rośnie przy ścieżce do lasu. Zebrałem już dwa liście!'],
+ ['Ada','Gryffindor',{color:'#a64a43',skin:'#6e4a37',style:'pony',hair:'#120d0b',eyes:'#2e1f15',face:{soft:.8}},'Nie stój w miejscu, kiedy lecą zaklęcia. Ruszaj się!'],
+ ['Tymon','Slytherin',{color:'#508e78',skin:'#d9b79a',style:'curly',hair:'#1b1512',eyes:'#56603a',face:{nose:.5}},'Pojedynek? Dobrze. Ale najpierw ukłon.'],
+ ['Łucja','prefekt',{color:'#548a73',style:'bun',hair:'#6b4630',face:{soft:.7,nose:.2}},'Cisza nocna zaczyna się o dziewiątej. Pamiętaj.'],
+ ['Bartłomiej Wrzos','mistrz pojedynków',{color:'#8a3f36',robe:'#2b2421',hair:'#4b4038',beard:true,face:{old:.45,broad:.6},build:1.12,scale:1.05},'Różdżka w górę, stopy pewnie. Zaczynamy na mój znak.'],
+ ['Agata Sowińska','bibliotekarka',{color:'#6d5a8a',robe:'#2a2733',hair:'#b9b4ab',style:'bun',hat:true,face:{old:.9,soft:.6,nose:.3},scale:.96},'Książki wracają na półki w tym samym stanie, w jakim je wypożyczono.'],
+ ['Rozalia','zielarka',{color:'#ad8bba',robe:'#55485f',style:'long',hair:'#a36b45',skin:'#e0b796',face:{soft:.6,old:.35}},'Mam świeże zioła. Eliksir za trzydzieści galeonów.'],
+ ['Igor Mrok','woźny',{color:'#5e5a4c',robe:'#2e2c26',hair:'#5b5650',beard:true,face:{old:.7,nose:.9,broad:.3},build:1.06,scale:1.02},'Kto znowu nanosił błota na schody?!'],
 ];
 const tags=document.getElementById('tags');
-const actors=CAST.map(([name,o],i)=>{
- const a=createActor(o),x=(i-(CAST.length-1)/2)*1.5,z=-Math.abs(x)*.3;
+const actors=CAST.map(([name,role,o,line],i)=>{
+ const a=createActor(o),x=(i-(CAST.length-1)/2)*1.55,z=-Math.abs(x)*.28;
  a.root.position.set(x,0,z);a.root.rotation.y=-x*.06;scene.add(a.root);
- const tag=document.createElement('span');tag.textContent=name;tags.appendChild(tag);
- return{a,tag,h:2.12*(o.scale||1)+(i%2?.32:0),offset:i*.37};
+ const bench=new T.Mesh(new T.BoxGeometry(.62,.46,.42),benchMat);bench.position.set(x,.23,z-.2);bench.castShadow=bench.receiveShadow=true;bench.visible=false;scene.add(bench);benches.push(bench);
+ const tag=document.createElement('span');tag.innerHTML=`${name}<small>${role}</small>`;tags.appendChild(tag);
+ const r={a,tag,line,h:2.1*(o.scale||1)+(i%2?.3:0),offset:i*.37,i};tag.onclick=()=>focus(r);
+ return r;
 });
 document.getElementById('loading').remove();
 
-const MODES=[['idle','Spoczynek'],['walk','Chód'],['jog','Trucht'],['run','Bieg'],['talk','Rozmowa'],['cast','Zaklęcie'],['dodge','Unik']];
-let mode=q.get('mode')||'walk';const nav=document.getElementById('modes');
-const buttons=MODES.map(([id,label],i)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>setMode(id);nav.appendChild(b);return[id,b];});
-function setMode(m){mode=m;for(const[id,b]of buttons)b.setAttribute('aria-pressed',String(id===m));}
-setMode(mode);
-addEventListener('keydown',e=>{const n=+e.key;if(n>=1&&n<=MODES.length)setMode(MODES[n-1][0]);});
+const GROUPS=[
+ ['Ruch',[['idle','Spoczynek'],['walk','Chód'],['jog','Trucht'],['run','Bieg'],['strafe','Krok w bok'],['back','Tyłem']]],
+ ['Zaklęcia',[['basic','Pocisk'],['lumos','Lumos'],['leviosa','Leviosa'],['protego','Protego'],['expelliarmus','Expelliarmus'],['incendio','Krąg ognia'],['glacius','Zygzak']]],
+ ['Walka',[['guard','Gotowość'],['dodge','Uniki'],['hit','Trafienie'],['fall','Upadek'],['bow','Ukłon']]],
+ ['Życie',[['sit','Siedzenie'],['sitread','Lektura'],['read','Czytanie'],['think','Namysł'],['wave','Pozdrowienie'],['point','Wskazanie'],['nod','Skinienie'],['shrug','Wzruszenie'],['laugh','Śmiech'],['cheer','Radość'],['talk','Rozmowa']]],
+ ['Twarz',[['faces','Mimika'],['speech','Mowa'],['gaze','Wzrok']]],
+];
+let group=0,mode=q.get('mode')||'walk';
+const nav=document.getElementById('modes'),groupsEl=document.getElementById('groups');
+const groupButtons=GROUPS.map(([label],i)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>setGroup(i);groupsEl.appendChild(b);return b;});
+let buttons=[];
+function setGroup(i,keep){group=i;groupButtons.forEach((b,k)=>b.setAttribute('aria-pressed',String(k===i)));nav.innerHTML='';buttons=GROUPS[i][1].map(([id,label])=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>setMode(id);nav.appendChild(b);return[id,b];});if(!keep)setMode(GROUPS[i][1][0][0]);else setMode(mode);}
+function setMode(m){
+ mode=m;for(const[id,b]of buttons)b.setAttribute('aria-pressed',String(id===m));
+ for(const x of actors){const sit=m==='sit'||m==='sitread';if(x.a.state().down&&m!=='fall')x.a.getUp();x.a.sit(sit,m==='sitread');benches[x.i].visible=sit;
+  x.a.setGuard(m==='guard'||m==='strafe');x.a.setLoop(m==='think'?'think':m==='read'?'read':null);x.a.lookAt(null);x.a.setExpression('neutral');x.timer=0;}
+ document.getElementById('line').style.opacity=0;
+}
+const startGroup=GROUPS.findIndex(g=>g[1].some(([id])=>id===mode));setGroup(Math.max(0,startGroup),true);
+addEventListener('keydown',e=>{const gi='qwert'.indexOf(e.key.toLowerCase());if(gi>=0)setGroup(gi);const n=+e.key;const list=GROUPS[group][1];if(n>=1&&n<=list.length)setMode(list[n-1][0]);});
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+const mouse=new T.Vector2(),ray=new T.Raycaster(),gazePoint=new T.Vector3(0,1.6,8);
+addEventListener('pointermove',e=>{mouse.set(e.clientX/innerWidth*2-1,-(e.clientY/innerHeight)*2+1);});
+let focusTarget=null;
+function focus(r){focusTarget=r;const p=r.a.root.position;controls.target.set(p.x,1.6*(r.a.root.scale.x),p.z);camera.position.set(p.x+.35,1.68*(r.a.root.scale.x),p.z+1.5);}
+window.focusActor=i=>focus(actors[i]);
 
-const SPEED={idle:0,walk:1.25,jog:3.7,run:7.5,talk:0,cast:0,dodge:0};
-let t=0;const v=new T.Vector3();
+const SPELLS=['basic','lumos','leviosa','protego','expelliarmus','incendio','glacius'];
+const FACES=['happy','surprised','angry','sad','worried','smug','thinking','joy','stern'];
+let t=0;const v=new T.Vector3(),line=document.getElementById('line');
 function tick(dt){
  t+=dt;
+ ray.setFromCamera(mouse,camera);gazePoint.copy(ray.ray.origin).addScaledVector(ray.ray.direction,3);
  for(const x of actors){
-  const local=t+x.offset;
-  if(mode==='cast'&&Math.floor((local-dt)/1.6)!==Math.floor(local/1.6))x.a.cast();
-  if(mode==='dodge'&&Math.floor((local-dt)/1.5)!==Math.floor(local/1.5))x.a.dodge();
-  x.a.update(dt,t,SPEED[mode],mode==='talk');
+  const local=t+x.offset,a=x.a,beat=p=>Math.floor((local-dt)/p)!==Math.floor(local/p);
+  let speed=0,side=0,back=false;
+  if(mode==='walk')speed=1.25;else if(mode==='jog')speed=3.7;else if(mode==='run')speed=7.5;
+  else if(mode==='strafe'){speed=1.5;side=Math.sin(local*.8)>0?1:-1;}else if(mode==='back'){speed=1.2;back=true;}
+  if(SPELLS.includes(mode)){if(beat(mode==='protego'?2.4:1.8)){a.cast(mode);if(mode==='protego')setTimeout(()=>a.releaseShield(),1300);}}
+  if(mode==='dodge'&&beat(1.1))a.dodge('flrb'[Math.floor(local/1.1)%4]);
+  if(mode==='hit'&&beat(1.4))a.hit(Math.floor(local/1.4)%2===0);
+  if(mode==='fall'){x.timer+=dt;if(x.timer>.1&&!a.state().down&&x.timer<.3)a.knockdown();if(x.timer>3.6&&a.state().down)a.getUp();if(x.timer>6)x.timer=0;}
+  if(mode==='bow'&&beat(3))a.bow();
+  for(const g of ['wave','point','nod','shrug','laugh','cheer'])if(mode===g&&beat(2.6))a.gesture(g);
+  if(mode==='faces'&&beat(2.2)){a.setExpression(FACES[(Math.floor(local/2.2)+x.i)%FACES.length]);}
+  if(mode==='speech'&&beat(4.5)){a.say(x.line);if(x===focusTarget||(!focusTarget&&x.i===4)){line.textContent='„'+x.line+'”';line.style.opacity=1;}}
+  if(mode==='gaze'||mode==='speech'||mode==='faces')a.lookAt(mode==='gaze'?gazePoint:camera.position,1);
+  a.update(dt,t,{speed,side,back},mode==='talk'||(mode==='speech'&&a.speaking()));
  }
 }
-function labels(){for(const x of actors){v.copy(x.a.root.position);v.y+=x.h;v.project(camera);x.tag.style.left=(v.x*.5+.5)*innerWidth+'px';x.tag.style.top=(-v.y*.5+.5)*innerHeight+'px';x.tag.style.opacity=v.z<1?1:0;}}
+function labels(){for(const x of actors){v.copy(x.a.root.position);v.y+=x.h;v.project(camera);x.tag.style.left=(v.x*.5+.5)*innerWidth+'px';x.tag.style.top=(-v.y*.5+.5)*innerHeight+'px';x.tag.style.opacity=v.z<1&&!focusTarget?1:focusTarget===x?1:.25;}}
 const clock=new T.Clock();
 function frame(){tick(Math.min(.05,clock.getDelta()));controls.update();labels();renderer.render(scene,camera);if(!window.manual)requestAnimationFrame(frame);}
-// deterministic stepping for automated previews: window.manual=true; window.step(seconds)
 window.step=(s,fps=30)=>{for(let k=0;k<Math.round(s*fps);k++)tick(1/fps);controls.update();labels();renderer.render(scene,camera);};
-window.setMode=setMode;window.camera=camera;window.controls=controls;
+window.setMode=setMode;window.setGroup=setGroup;window.camera=camera;window.controls=controls;window.actors=actors;
 if(q.has('manual')){window.manual=true;step(0);}else requestAnimationFrame(frame);
 window.ready=true;
 </script></body></html>

@@ -1,7 +1,7 @@
 # Keyframed animation clips for the wizard rig (run after model.py).
 # Every pose is described as world-space rotations (relative to the rest pose)
 # and resolved down the hierarchy into local quaternions.
-import bpy, math
+import bpy, math, os
 from math import sin, cos, pi, acos, atan2, sqrt
 from mathutils import Vector, Matrix, Quaternion
 
@@ -42,6 +42,9 @@ def ease(keys, t):
         if t <= t1: return v0 + (v1 - v0) * smooth((t - t0) / (t1 - t0))
     return keys[-1][1]
 
+RUNTIME = {'jaw', 'lid.L', 'lid.R', 'eye.L', 'eye.R', 'pony'}
+BODY = [b.name for b in ARM.bones if b.name not in RUNTIME]
+
 class Pose:
     def __init__(self):
         self.W = {}; self.rel = {}; self.loc = Vector(); self.blink = 1.
@@ -57,22 +60,16 @@ class Pose:
             out[b] = local.to_quaternion()
         return out, Wt
 
-EYE_AX = {}
-for side in 'LR':
-    ax = REST_I[f'eye.{side}'] @ Vector((0, 0, 1)); EYE_AX[side] = max(range(3), key=lambda i: abs(ax[i]))
-
 def apply(pose, keyed=None):
     q, _ = pose.resolve()
     for pb in rig.pose.bones:
         pb.rotation_quaternion = q[pb.name]; pb.location = (0, 0, 0); pb.scale = (1, 1, 1)
     rig.pose.bones['hips'].location = REST_I['hips'] @ pose.loc
-    for side in 'LR':
-        sc = [1, 1, 1]; sc[EYE_AX[side]] = pose.blink; rig.pose.bones[f'eye.{side}'].scale = sc
 
 def record(name, frames, fn, keyed=None, loop=True):
     act = bpy.data.actions.new(name); act.use_fake_user = True
     rig.animation_data_create(); rig.animation_data.action = act
-    bones = keyed or [b.name for b in ARM.bones]
+    bones = [b for b in (keyed or BODY) if b not in RUNTIME]
     for f in range(frames + (1 if loop else 0)):
         pose = fn(f / frames if loop else f / (frames - 1))
         apply(pose)
@@ -80,7 +77,6 @@ def record(name, frames, fn, keyed=None, loop=True):
             pb = rig.pose.bones[b]
             pb.keyframe_insert('rotation_quaternion', frame=f)
             if b == 'hips': pb.keyframe_insert('location', frame=f)
-            if b.startswith('eye'): pb.keyframe_insert('scale', frame=f)
     for fc in getattr(act, 'fcurves', []) or []:
         for k in fc.keyframe_points: k.interpolation = 'LINEAR'
     try:
@@ -236,13 +232,11 @@ def idle_pose(phi):
     arms(pose, .5 + .02 * breath, .05 + .03 * sin(2 * pi * phi), -.12 + .03 * sin(2 * pi * phi + 1), .2 + .05 * shift, .55 + .05 * sin(2 * pi * phi + .3), handL=.12, handR=.25)
     robe(pose, 0, 0, 0, .0, .0, .015 * sin(2 * pi * phi - .6), flare=.01, sway=-.05 * sin(2 * pi * phi - .9))
     hat(pose, .02 * sin(2 * pi * phi - .7), side=.04 * sin(2 * pi * phi - .9))
-    for b0, b1 in ((1.2, 1.36), (3.05, 3.2)):
-        if b0 <= t <= b1: pose.blink = max(.08, abs((t - (b0 + b1) / 2) / ((b1 - b0) / 2)))
     return pose
 record('idle', 120, idle_pose)
 
 # ------------------------------------------------------------------ talk (additive layer, 3 s loop; frame 0 is neutral)
-TALK_BONES = ['spine', 'chest', 'neck', 'head', 'shoulder.L', 'upper_arm.L', 'forearm.L', 'hand.L', 'upper_arm.R', 'forearm.R', 'hand.R', 'eye.L', 'eye.R']
+TALK_BONES = ['spine', 'chest', 'neck', 'head', 'shoulder.L', 'upper_arm.L', 'forearm.L', 'hand.L', 'upper_arm.R', 'forearm.R', 'hand.R']
 def talk_pose(phi):
     pose = Pose(); t = phi * 3
     g1 = sin(pi * min(1, max(0, (t - .15) / 1.2))) ** 2          # open-hand gesture
@@ -255,7 +249,6 @@ def talk_pose(phi):
     pose.relative('forearm.R', Rax(hinge('forearm.R'), .35 * g2))
     pose.relative('chest', Rz(.06 * g1 - .05 * g2) @ Rx(.02 * (g1 + g2)))
     pose.relative('head', Rx(nod) @ Ry(.05 * sin(2 * pi * phi * 2)))
-    if 2.6 <= t <= 2.75: pose.blink = max(.08, abs((t - 2.675) / .075))
     return pose
 record('talk', 90, talk_pose, keyed=TALK_BONES)
 
@@ -298,5 +291,6 @@ def dodge_pose(u):
     return pose
 record('dodge', 13, dodge_pose, loop=False)
 
+exec(open(os.path.join(HERE, 'anim2.py')).read())
 rig.animation_data.action = bpy.data.actions['idle']
 print('ANIM OK', [a.name for a in bpy.data.actions])
