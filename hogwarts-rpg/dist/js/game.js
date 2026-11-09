@@ -10,6 +10,8 @@ import { createRoomIdentity } from "./room-identity.js";
 import { createActor, createDummy, labelSprite, setActorCamera, setActorQuality } from "./actors.js";
 import { createCameraRig } from "./camera-rig.js";
 import { createDuels, DUELISTS } from "./duel.js";
+import { createCastle, CASTLE_ROOMS, FLOORS } from "./castle.js";
+import { createCastleLife } from "./castle-life.js";
 import { createEffects, createAudio } from "./effects.js";
 import {
   SAVE_KEY,
@@ -160,6 +162,93 @@ function castleFloor(p, y = playerPos.y) {
   return castle ? castle.floorAt(p.x, p.z, y) : 0;
 }
 let duelHit = () => {};
+const CELL_NAMES = { entrance: "Sala Wejściowa", exit: "Sala Wejściowa", tower: "Wielkie Schody", stairsD: "Schody do lochów", D: "Lochy", F1: "Pierwsze piętro", F2: "Drugie piętro", F3: "Trzecie piętro" };
+let life = null;
+function buildCastle() {
+  const c = createCastle({ ROOMS, createInterior, createRoomIdentity, createRoomActivityProps });
+  c.onRoomLoaded = (slot) => populateCastleRoom(slot);
+  c.onRoomUnloaded = (slot) => clearCastleRoom(slot);
+  life = createCastleLife({ castle: c, scene, createActor, labelSprite, bark, effects, audio });
+  for (const e of life.people) e.actor.onStep = (side, speed) => audio.footstep?.(c.surfaceAt(e.actor.root.position), speed * 0.7, e.actor.root.position, camera);
+  return c;
+}
+const castleBand = (y) => (y < -3.5 ? "D" : y < 4 ? "G" : y < 12 ? "F1" : y < 20 ? "F2" : "F3");
+function professorOptions(id, info) {
+  const teacher = id === "charms" ? "flitwick" : id === "potions" ? "snape" : id === "great-hall" ? "dumbledore" : "teacher";
+  const opts =
+    teacher === "flitwick"
+      ? { color: "#ac9a7b", scale: 0.85, beard: true, hair: "#c0b8aa", style: "short" }
+      : teacher === "snape"
+        ? { color: "#444b49", robe: "#182024", hair: "#171819", style: "long", skin: "#d2b39b" }
+        : {
+            color: info.color || "#b59a6a",
+            hat: teacher === "dumbledore",
+            beard: teacher === "dumbledore",
+            hair: "#b6b3a7",
+            style: teacher === "dumbledore" ? "long" : "short",
+            eyes: teacher === "dumbledore" ? "#4d6d8c" : "#4b3a28",
+          };
+  return { teacher, opts };
+}
+// professors, practice stations and quest props appear with their classroom
+function populateCastleRoom(slot) {
+  const info = slot.loaded.info,
+    W = slot.loaded.toWorld,
+    before = entities.length,
+    ownedBefore = owned.length;
+  const at = (lx, lz) => W(lx, lz);
+  if (info.professor) {
+    const { teacher, opts } = professorOptions(slot.id, info);
+    const tp = slot.loaded.room.teacherPosition || [0, 0, -10];
+    const [x, z] = at(tp[0], tp[2]);
+    const n = npc(teacher, info.professor, x, z, opts);
+    n.actor.root.rotation.y = slot.ry;
+    n.slotRoom = slot.id;
+  }
+  const [px, pz] = at(8.6, 15);
+  const station = door("practice-" + slot.id, ACTIVITIES[slot.id]?.title || "Ćwiczenie", px, pz, showCurrentActivity);
+  station.kind = "ĆWICZENIE";
+  if (slot.id === "charms") for (const [id, lx, lz] of [["stone-a", -9, 11], ["stone-b", 0, 6], ["stone-c", 9, 11]]) stone(id, ...at(lx, lz));
+  if (slot.id === "potions")
+    door("brew", "Uwarz eliksir zdrowia", ...at(-10, 12), () => {
+      if (brew(state)) {
+        save();
+        refreshHUD();
+        toast("Eliksir gotowy. Odzyskuje 65 punktów zdrowia.");
+        effects.sparks(playerPos, "#99d6a0");
+      } else toast("Potrzebujesz 3 liści dittany. Znajdziesz je na błoniach.");
+    });
+  if (slot.id === "library") {
+    pickup("library-chest", "chest", ...at(-10, 13));
+    const [lx, lz] = at(0, -11.5);
+    const agata = npc("agata", "Agata Sowińska · bibliotekarka", lx, lz, { color: "#6d5a8a", robe: "#2a2733", hair: "#b9b4ab", style: "bun", hat: true, face: { old: 0.9, soft: 0.6, nose: 0.3 }, scale: 0.96, mood: "stern" });
+    agata.actor.root.rotation.y = slot.ry;
+    agata.actor.read(true);
+  }
+  for (const e of entities.slice(before)) e.slotRoom = slot.id;
+  slot.owned = owned.slice(ownedBefore);
+}
+function clearCastleRoom(slot) {
+  const gone = entities.filter((e) => e.slotRoom === slot.id);
+  for (const e of gone) {
+    if (e.actor) {
+      e.actor.dispose();
+      zoneGroup.remove(e.actor.root);
+      actors = actors.filter((a) => a !== e);
+    }
+    if (e.mesh?.userData.label) zoneGroup.remove(e.mesh.userData.label);
+    if (dialogueNpc === e) closeDialogue();
+  }
+  for (const o of slot.owned || []) {
+    zoneGroup.remove(o);
+    o.geometry?.dispose();
+    o.material?.dispose?.();
+  }
+  owned = owned.filter((o) => !(slot.owned || []).includes(o));
+  entities = entities.filter((e) => e.slotRoom !== slot.id);
+  if (nearby && nearby.slotRoom === slot.id) nearby = null;
+  if (target && target.slotRoom === slot.id) target = null;
+}
 const bannerEl = document.createElement("div"),
   barkEl = document.createElement("div");
 bannerEl.id = "banner";
@@ -274,7 +363,7 @@ const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z),
   clamp = T.MathUtils.clamp,
   damp = (a, b, rate, dt) => T.MathUtils.lerp(a, b, 1 - Math.exp(-rate * dt));
 function height(x, z) {
-  return zone === "courtyard" ? 26.4 : room ? 0 : Math.max(world.groundHeight(x, z), 1);
+  return zone === "courtyard" ? 26.4 : room ? 0 : zone === "castle" ? castle.floorAt(x, z, playerPos.y) : Math.max(world.groundHeight(x, z), 1);
 }
 function position(x, z, y = 0) {
   return V(x, height(x, z) + y, z);
@@ -396,8 +485,35 @@ function rune(id, x, z) {
   marker(position(x, z), done ? "#dfc17e" : "#9b7cc1", 1.1);
   entities.push({ id, type: "rune", name: done ? "Przebudzona runa" : "Uśpiona runa", pos: mesh.position, mesh, baseY: pos.y });
 }
+function secretPassage(t) {
+  const to = castle.passage.find((x) => x.id === t.to);
+  const first = record(state, "found", "passage");
+  $("#fade").style.opacity = "1";
+  setTimeout(() => {
+    playerPos.copy(to.pos).add(V(Math.sin(to.ry) * 1.2, 0, Math.cos(to.ry) * 1.2));
+    player.root.position.copy(playerPos);
+    look.yaw = to.ry;
+    rig.snap(playerPos.clone().add(V(0, 1.5, 0)));
+    $("#fade").style.opacity = "0";
+    if (first) {
+      for (const e of entities)
+        if (castle.passage.some((x) => x.id === e.id)) {
+          e.kind = "SEKRETNE PRZEJŚCIE";
+          e.name = "Przejście za gobelinem";
+        }
+      state.xp += 40;
+      toast("Odkryto sekretne przejście za gobelinem! +40 PD");
+      save();
+      refreshHUD();
+    }
+  }, 300);
+}
 function clearZone() {
   duels.abort();
+  if (zone === "castle") {
+    castle?.unloadAll();
+    life?.setActive(null);
+  }
   disposeActivity();
   roomIdentity?.dispose();
   activityProps?.dispose();
@@ -405,6 +521,7 @@ function clearZone() {
   activityProps = null;
   effects.clear();
   for (const a of actors) {
+    if (a.life) continue;
     a.actor.dispose();
     a.actor.root.traverse((o) => {
       if (o.isSprite) {
@@ -460,9 +577,9 @@ function populate() {
       [31, 39],
     ]);
     npc("wrzos", "Bartłomiej Wrzos", 13.6, 18.4, { color: "#8a3f36", robe: "#2b2421", hair: "#4b4038", beard: true, face: { old: 0.45, broad: 0.6 }, build: 1.12, scale: 1.05, mood: "stern" });
-    door("charms-door", "Sala zaklęć", 12.1, 31, () => travel("charms"));
-    door("hall-door", "Wielka Sala", 23, 16.6, () => travel("great-hall"));
-    door("potions-door", "Lochy eliksirów", 33, 32, () => travel("potions"));
+    door("charms-door", "Sala zaklęć · zamek", 12.1, 31, () => travel("castle", "charms"));
+    door("hall-door", "Sala Wejściowa · zamek", 23, 16.6, () => travel("castle", "entrance"));
+    door("potions-door", "Lochy eliksirów · zamek", 33, 32, () => travel("castle", "potions"));
     door("grounds-door", "Brama na błonia", 29, 41.5, () => travel("grounds"));
     for (const [i, x, z] of [
       [0, 15, 23],
@@ -471,6 +588,44 @@ function populate() {
     ])
       enemy("dummy-" + i, "Manekin treningowy", x, z);
     pickup("courtyard-chest", "chest", 15, 35);
+  } else if (zone === "castle") {
+    // classroom doors: quest targets and signs; rooms themselves stream in with their props
+    for (const slot of castle.slots) {
+      const info = ROOMS.find((r) => r.id === slot.id);
+      if (!info) continue;
+      const pos = slot.door.clone();
+      const e = { id: slot.id === "charms" ? "charms-door" : slot.id + "-door", type: "door", name: info.name, pos, action: () => toast("Wejdź do środka: " + info.name), hidden: true, castleDoor: true };
+      entities.push(e);
+      const sign = labelSprite(info.name);
+      sign.position.copy(pos).y += 4.6;
+      sign.userData.castleSign = slot;
+      own(sign);
+    }
+    const placeAt = (e, y) => {
+      e.pos.y = y;
+      e.mesh.position.y = y + 0.05;
+      e.mesh.userData.label.position.y = y + 2.1;
+    };
+    placeAt(door("exit", "Wyjście na dziedziniec", 0, 42.6, () => travel("courtyard", "castle")), FLOORS.G);
+    placeAt(door("astronomy-door", "Schody na Wieżę Astronomiczną", castle.towerDoor.x + 1.2, castle.towerDoor.z, () => travel("astronomy-class")), FLOORS.F3);
+    npc("hall-ada", "Ada · Gryffindor", 6.5, 33, { color: "#a64a43", skin: "#6e4a37", style: "pony", hair: "#120d0b", eyes: "#2e1f15", face: { soft: 0.8 } }, [
+      [6.5, 33],
+      [6.5, 20],
+      [-6, 20],
+      [-6, 33],
+    ]);
+    npc("hall-tymon", "Tymon · Slytherin", -7.5, 37, { color: "#508e78", skin: "#d9b79a", style: "curly", hair: "#1b1512", eyes: "#56603a", face: { nose: 0.5 } });
+    for (const n of actors) if (n.id.startsWith("hall-")) n.pos.y = FLOORS.G;
+    for (const e of life.entities()) {
+      entities.push(e);
+      if (e.actor) actors.push(e);
+    }
+    // field guide pages and the tapestry passage
+    for (const pg of castle.pages) {
+      pg.mesh.visible = !state.found.includes(pg.id);
+      if (!state.found.includes(pg.id)) entities.push({ id: pg.id, type: "page", name: "Strona przewodnika · " + pg.place, pos: pg.pos, page: pg });
+    }
+    for (const t of castle.passage) entities.push({ id: t.id, type: "door", kind: state.found.includes("passage") ? "SEKRETNE PRZEJŚCIE" : "GOBELIN", name: state.found.includes("passage") ? "Przejście za gobelinem" : "Stary gobelin", pos: t.pos.clone(), action: () => secretPassage(t) });
   } else if (room) {
     const info = ROOMS.find((r) => r.id === roomId);
     if (info.professor) {
@@ -539,7 +694,7 @@ function populate() {
   }
 }
 function setLighting() {
-  const inside = !!room;
+  const inside = !!room || zone === "castle";
   sky.setInterior(inside);
   environment.setInterior(inside);
   graphics.setInterior(inside);
@@ -554,7 +709,7 @@ function setLighting() {
   renderer.toneMappingExposure = inside ? 1.25 : 1.22;
   renderer.shadowMap.needsUpdate = true;
 }
-function switchZone(destination) {
+function switchZone(destination, arrive = null) {
   clearZone();
   if (room) {
     scene.remove(room.group);
@@ -564,10 +719,21 @@ function switchZone(destination) {
   roomId = null;
   zone = destination;
   world.group.visible = ["courtyard", "grounds", "forest", "hogsmeade"].includes(destination);
+  if (castle) castle.group.visible = destination === "castle";
   let spawn;
-  if (destination === "courtyard") {
-    spawn = [29, 26.4, 37.5];
-    look.yaw = 0.25;
+  if (destination === "castle") {
+    castle ??= buildCastle();
+    if (!castle.group.parent) scene.add(castle.group);
+    castle.group.visible = true;
+    const door = arrive && arrive !== "entrance" ? castle.doorstep(arrive) : null;
+    const p = door ? door.pos : castle.spawn.entrance;
+    spawn = [p.x, p.y, p.z];
+    look.yaw = door ? door.yaw + Math.PI : 0;
+    look.distance = 3.8;
+    $("#region").textContent = "ZAMEK HOGWART";
+  } else if (destination === "courtyard") {
+    spawn = arrive === "castle" ? [23, 26.4, 19.5] : [29, 26.4, 37.5];
+    look.yaw = arrive === "castle" ? Math.PI : 0.25;
     look.distance = 4.2;
     $("#location-name").textContent = "Dziedziniec";
     $("#region").textContent = "ZAMEK HOGWART";
@@ -601,6 +767,7 @@ function switchZone(destination) {
   playerPos.set(...spawn);
   player.root.position.copy(playerPos);
   player.root.rotation.y = look.yaw + Math.PI;
+  if (zone === "castle") castle.update(0.016, elapsed, playerPos, camera);
   velocity.set(0, 0, 0);
   look.pitch = 0.04;
   shieldUntil = 0;
@@ -613,7 +780,11 @@ function switchZone(destination) {
   updateCamera(0.016, true);
   renderer.shadowMap.needsUpdate = true;
 }
-function travel(destination) {
+function travel(destination, arrive = null) {
+  if (CASTLE_ROOMS.has(destination)) {
+    arrive = destination;
+    destination = "castle";
+  }
   if (transitioning) return;
   disposeActivity();
   closeDialogue();
@@ -622,9 +793,13 @@ function travel(destination) {
   keys.clear();
   transitioning = true;
   $("#fade").style.opacity = "1";
-  setTimeout(() => {
-    switchZone(destination);
+  setTimeout(async () => {
+    switchZone(destination, arrive);
     save();
+    // build shaders for the new place before the fade lifts (avoids a hitch on first entry)
+    try {
+      await Promise.race([renderer.compileAsync?.(scene, camera), new Promise((r) => setTimeout(r, 2500))]);
+    } catch {}
     setTimeout(() => {
       $("#fade").style.opacity = "0";
       transitioning = false;
@@ -749,7 +924,7 @@ function chooseLine(choice) {
   }, Math.min(1700, 350 + seconds * 900));
 }
 function say(npc, role, text, choices) {
-  if (room && ACTIVITIES[roomId] && ["teacher", "flitwick", "snape", "dumbledore"].includes(npc.id))
+  if ((room || zone === "castle") && ACTIVITIES[roomId] && ["teacher", "flitwick", "snape", "dumbledore"].includes(npc.id))
     choices = [
       ...choices.slice(0, -1),
       { text: "Rozpocznij ćwiczenie: " + ACTIVITIES[roomId].title, action: showCurrentActivity },
@@ -765,6 +940,11 @@ function say(npc, role, text, choices) {
   $("#speaker-role").textContent = role;
   $("#dialogue-text").textContent = "";
   $("#choices").hidden = true;
+  if (npc.life && npc.state === "walk") {
+    npc.state = "idle";
+    npc.timer = 6;
+    npc.motion.speed = 0;
+  }
   if (npc.actor) {
     npc.actor.root.rotation.y = Math.atan2(playerPos.x - npc.pos.x, playerPos.z - npc.pos.z);
     player.root.rotation.y = Math.atan2(npc.pos.x - playerPos.x, npc.pos.z - playerPos.z);
@@ -909,6 +1089,9 @@ function talk(n) {
         leave,
       ],
     );
+  else if (n.life) say(n, n.role || "UCZEŃ HOGWARTU", n.lines[Math.floor(Math.random() * n.lines.length)], [leave]);
+  else if (n.id === "agata")
+    say(n, "BIBLIOTEKARKA", "Cisza, proszę. Książki wracają na półki w tym samym stanie, w jakim je wypożyczono. A strony przewodnika po zamku? Kto je znajdzie, ten wie o Hogwarcie więcej niż niejeden prefekt.", [leave]);
   else if (n.id === "wrzos") {
     const tips = { text: "Jak wygrać pojedynek?", action: () => say(n, "MISTRZ POJEDYNKÓW", "Nie stój w miejscu. Alt z kierunkiem to unik w bok, Protego odbija cios, a mocne Expelliarmus potrafi powalić. Kiedy przeciwnik unosi różdżkę, masz pół sekundy. Obserwuj jego rękę, nie twarz.", [leave]) };
     if (state.stage < 4)
@@ -997,6 +1180,19 @@ function interact() {
       refreshHUD();
       toast(e.type === "herb" ? `Zebrano dittany · ${state.herbs} liści` : "+30 galeonów · +20 PD");
     }
+  } else if (e.type === "page") {
+    if (record(state, "found", e.id)) {
+      e.hidden = true;
+      e.page.mesh.visible = false;
+      state.xp += 15;
+      effects.sparks(e.pos, "#ffe7a8", 40, 2);
+      audio.note(880, 0.4, "sine", 0.04);
+      const total = castle.pages.length,
+        got = castle.pages.filter((p) => state.found.includes(p.id)).length;
+      panel(`<h2>${safe(e.page.place)}</h2><p class="lore">${safe(e.page.text)}</p><p>Strony przewodnika: ${got} / ${total} · +15 PD</p>`, "PRZEWODNIK PO ZAMKU");
+      save();
+      refreshHUD();
+    }
   } else if (e.type === "rune") toast("Rzuć Lumos (2), stojąc blisko runy.");
   else if (e.type === "stone") toast("Wybierz Wingardium Leviosa (3) i rzuć zaklęcie.");
 }
@@ -1005,7 +1201,7 @@ function targetForSpell() {
   let best = null,
     score = -100;
   for (const e of entities) {
-    if (!["enemy", "stone", "duelist"].includes(e.type) || e.hidden || e.hp === 0) continue;
+    if (!["enemy", "stone", "duelist", "spirit"].includes(e.type) || e.hidden || e.hp === 0 || (e.type === "spirit" && !e.active)) continue;
     if (e.type === "enemy" && (e.boss ? state.stage !== 6 : state.stage < 3)) continue;
     if (e.type === "stone" && (state.stage < 2 || (state.stage === 2 && state.levitated.includes(e.id)))) continue;
     const offset = e.pos.clone().sub(playerPos);
@@ -1109,6 +1305,12 @@ function releaseSpell(a, e) {
     return;
   }
   const f = facingVec();
+  if (e?.type === "spirit") {
+    const at = e.pos.clone(),
+      dir = at.clone().sub(from).normalize();
+    effects.projectile(from, at.clone().addScaledVector(dir, 8), { color: a.color, targetTest: (p) => !e.hidden && p.distanceTo(e.pos) < 0.7, onHit: () => life.scare() });
+    return;
+  }
   if (e?.type === "duelist") {
     const at = e.pos.clone().add(V(0, 1.05, 0)),
       dir = at.clone().sub(from).normalize();
@@ -1244,9 +1446,11 @@ function dodge() {
 }
 function getColliders() {
   if (room) return room.colliders;
+  if (zone === "castle") return castle.colliders(playerPos.y);
   return zone === "courtyard" ? [{ x: 23, z: 31, r: 4.55 }] : world.colliders;
 }
 function getBounds() {
+  if (zone === "castle") return null;
   return room
     ? room.bounds
     : zone === "courtyard"
@@ -1280,12 +1484,12 @@ function updateMovement(dt) {
     velocity.z = damp(velocity.z, dz, locked ? 3 : length ? 12 : 16, dt);
   }
   const previous = playerPos.clone(),
-    next = moveCircle(playerPos, velocity.x * dt, velocity.z * dt, getColliders(), getBounds());
-  const nextH = zone === "castle" ? castleFloor(next, playerPos.y) : height(next.x, next.z);
+    next = zone === "castle" ? castle.move(playerPos, velocity.x * dt, velocity.z * dt) : moveCircle(playerPos, velocity.x * dt, velocity.z * dt, getColliders(), getBounds());
+  const nextH = zone === "castle" ? next.y : height(next.x, next.z);
   if (zone !== "grounds" || Math.abs(nextH - playerPos.y) < 1.2) {
     playerPos.x = next.x;
     playerPos.z = next.z;
-    playerPos.y = damp(playerPos.y, nextH, 24, dt);
+    playerPos.y = zone === "castle" ? nextH : damp(playerPos.y, nextH, 24, dt);
   }
   const actual = previous.distanceTo(playerPos) / dt;
   // in a fight the character keeps facing the opponent and steps around them
@@ -1359,6 +1563,10 @@ function updateCamera(dt, snap = false) {
 function updateActors(dt) {
   for (const n of actors) {
     let speed = 0;
+    if (n.life) {
+      if (!n.active) continue;
+      speed = n === dialogueNpc ? 0 : n.motion?.speed || 0;
+    }
     if (n.route && n !== dialogueNpc) {
       n.pause -= dt;
       if (n.pause <= 0) {
@@ -1371,10 +1579,10 @@ function updateActors(dt) {
         } else {
           speed = 1.25;
           delta.normalize();
-          const p = moveCircle(n.pos, delta.x * speed * dt, delta.z * speed * dt, getColliders(), getBounds(), 0.3);
+          const p = zone === "castle" ? castle.move(n.pos, delta.x * speed * dt, delta.z * speed * dt, 0.3) : moveCircle(n.pos, delta.x * speed * dt, delta.z * speed * dt, getColliders(), getBounds(), 0.3);
           n.pos.x = p.x;
           n.pos.z = p.z;
-          n.pos.y = height(p.x, p.z);
+          n.pos.y = zone === "castle" ? p.y : height(p.x, p.z);
           const yaw = Math.atan2(delta.x, delta.z),
             diff = Math.atan2(Math.sin(yaw - n.actor.root.rotation.y), Math.cos(yaw - n.actor.root.rotation.y));
           n.actor.root.rotation.y += diff * (1 - Math.exp(-4 * dt));
@@ -1389,9 +1597,11 @@ function updateActors(dt) {
         dz = playerPos.z - n.pos.z,
         d = Math.hypot(dx, dz),
         rel = Math.atan2(Math.sin(Math.atan2(dx, dz) - n.actor.root.rotation.y), Math.cos(Math.atan2(dx, dz) - n.actor.root.rotation.y));
-      n.actor.lookAt?.(d < 6 && Math.abs(rel) < 1.9 ? player.head : null, d < 6 ? 1 : 0);
+      // students chatting in pairs keep their eyes on each other
+      const target = n.life && n.state === "chat" && n.partner && n !== dialogueNpc ? n.partner.actor.head : d < 6 && Math.abs(rel) < 1.9 ? player.head : null;
+      n.actor.lookAt?.(target, target ? 1 : 0);
     }
-    n.actor.update(dt, elapsed, speed, n === dialogueNpc && n.actor.speaking?.());
+    n.actor.update(dt, elapsed, speed, (n === dialogueNpc && n.actor.speaking?.()) || !!n.talking);
   }
   for (const e of entities) {
     if (e.hidden) continue;
@@ -1452,7 +1662,7 @@ function updateInteraction() {
   nearby = null;
   let distance = Infinity;
   for (const e of duels.active ? [] : entities) {
-    if (e.type === "enemy" || e.hidden) continue;
+    if (e.type === "enemy" || e.type === "spirit" || e.hidden || (e.life && !e.active)) continue;
     const d = e.pos.distanceTo(playerPos),
       range = e.type === "npc" ? 3.1 : e.type === "door" ? 2.4 : 2.5;
     if (d < range && d < distance) {
@@ -1465,7 +1675,7 @@ function updateInteraction() {
     $("#interaction-name").textContent = nearby.name;
     $("#interaction-kind").textContent =
       nearby.kind ||
-      { npc: "ROZMOWA", door: "PRZEJDŹ", herb: "ZBIERZ", chest: "OTWÓRZ", stone: "ZAKLĘCIE", rune: "STARA MAGIA" }[nearby.type];
+      { npc: "ROZMOWA", door: "PRZEJDŹ", herb: "ZBIERZ", chest: "OTWÓRZ", stone: "ZAKLĘCIE", rune: "STARA MAGIA", page: "ZNALEZISKO" }[nearby.type];
   }
   target = targetForSpell();
   $("#target-hud").hidden = !target;
@@ -1505,7 +1715,7 @@ const radar = $("#radar"),
 function drawRadar() {
   const size = 190,
     c = size / 2,
-    scale = zone === "courtyard" ? 3 : room ? 2.5 : 0.6;
+    scale = zone === "courtyard" ? 3 : room || zone === "castle" ? 2.5 : 0.6;
   ctx.clearRect(0, 0, size, size);
   ctx.save();
   ctx.beginPath();
@@ -1562,7 +1772,7 @@ function drawRadar() {
   ctx.beginPath();
   ctx.arc(c, c, 65, 0, Math.PI * 2);
   ctx.stroke();
-  $("#radar-label").textContent = room ? "HOGWART" : zone === "courtyard" ? "DZIEDZINIEC" : "BŁONIA";
+  $("#radar-label").textContent = room || zone === "castle" ? "HOGWART" : zone === "courtyard" ? "DZIEDZINIEC" : "BŁONIA";
   const angle = ((((look.yaw * 180) / Math.PI) % 360) + 360) % 360;
   $("#bearing").textContent = ["N", "NW", "W", "SW", "S", "SE", "E", "NE"][Math.round(angle / 45) % 8];
 }
@@ -1652,6 +1862,7 @@ function showMap() {
   panel(
     `<h2>Mapa Hogwartu</h2><p>Wybierz punkt podróży lub wróć do pieszej eksploracji. Złoty znacznik wskazuje bieżące zadanie.</p><div class="map-layout"><svg class="map-illustration" viewBox="0 0 360 340" role="img" aria-label="Schemat błoni"><path d="M36 100Q65 40 150 38T315 91L330 249Q237 319 143 292T34 218Z"/><path d="M178 156L76 178L59 90M178 156L274 73M178 156L201 253" stroke-dasharray="4 5"/><path d="M104 231Q210 173 292 218T188 294T104 231Z" style="fill:#4a7c8b33"/><path d="M53 119L72 62L88 123M70 124L95 74L113 131M93 134L121 91L140 142"/><circle cx="178" cy="156" r="7"/><circle cx="76" cy="178" r="4"/><circle cx="59" cy="90" r="4"/><circle cx="274" cy="73" r="4"/><text x="189" y="154">Hogwart</text><text x="75" y="197">Chatka Hagrida</text><text x="33" y="50">Zakazany Las</text><text x="241" y="58">Hogsmeade</text><text x="177" y="252">Czarne Jezioro</text><text x="145" y="320" style="font-size:8px">SCHEMAT ORIENTACYJNY</text></svg><div class="travel-list">${[
       ["courtyard", "Dziedziniec"],
+      ["castle", "Sala Wejściowa · wnętrze zamku"],
       ["charms", "Sala zaklęć"],
       ["great-hall", "Wielka Sala"],
       ["potions", "Lochy eliksirów"],
@@ -1952,6 +2163,30 @@ window.addEventListener("resize", () => {
 window.addEventListener("pagehide", () => {
   if (state.started) save();
 });
+function fixedStep(dt) {
+  elapsed += dt;
+  updateMovement(dt);
+  // castle residents live on the floor you are on; the rest wait, hidden
+  if (zone === "castle" && life) {
+    const band = castleBand(playerPos.y);
+    life.setActive(band);
+    if (!dialogueNpc) life.update(dt, elapsed, playerPos, player, band, { douse: (p) => castle.douse(p, elapsed) });
+  }
+  updateActors(dt);
+  duels.update(dt, elapsed);
+  if (duels.active) lastCombat = elapsed;
+  effects.update(dt, playerPos, hurt);
+}
+// test hook: advance the simulation quickly (software renderers are slow)
+function simulate(seconds, held = []) {
+  for (const k of held) keys.add(k);
+  for (let i = 0; i < Math.round(seconds * 60); i++) {
+    fixedStep(1 / 60);
+    if (zone === "castle" && castle && i % 6 === 0) castle.update(0.1, elapsed, playerPos, camera, { onRide: (d) => ((player.root.rotation.y += d), (look.yaw += d)) });
+    updateCamera(1 / 60);
+  }
+  for (const k of held) keys.delete(k);
+}
 let last = performance.now(),
   accumulator = 0,
   frames = 0,
@@ -1967,12 +2202,7 @@ function frame(now) {
   if (running) {
     accumulator += wallDt;
     while (accumulator >= 1 / 60) {
-      elapsed += 1 / 60;
-      updateMovement(1 / 60);
-      updateActors(1 / 60);
-      duels.update(1 / 60, elapsed);
-      if (duels.active) lastCombat = elapsed;
-      effects.update(1 / 60, playerPos, hurt);
+      fixedStep(1 / 60);
       accumulator -= 1 / 60;
     }
     updateCamera(wallDt);
@@ -1981,6 +2211,12 @@ function frame(now) {
       uiTick = 0;
       updateInteraction();
       drawRadar();
+      if (zone === "castle") {
+        const cell = castle.cellAt(playerPos);
+        const name = roomId ? ROOMS.find((r) => r.id === roomId)?.name : CELL_NAMES[cell] || CELL_NAMES[String(cell).replace(/^door:/, "")] || "Hogwart";
+        if (name && $("#location-name").textContent !== name) $("#location-name").textContent = name;
+        for (const o of owned) if (o.userData?.castleSign) o.visible = Math.abs(o.position.y - 4.6 - playerPos.y) < 3 && o.position.distanceTo(playerPos) < 16;
+      }
       $("#health-fill").style.width = (health / stats(state).health) * 100 + "%";
       $("#health-label").textContent = Math.ceil(health) + " / " + stats(state).health;
       $("#mana-fill").style.width = (mana / stats(state).mana) * 100 + "%";
@@ -2017,7 +2253,17 @@ function frame(now) {
     lumos.intensity = (lumosOn ? 7 : 0) + flash * 14;
     lumos.color.set("#ffe2a4").lerp(flashColor, Math.min(1, flash));
   } else lumos.intensity = 0;
-  if (room) {
+  if (zone === "castle" && castle) {
+    castle.update(wallDt, elapsed, playerPos, camera, {
+      onTurn: () => audio.note(55, 1.6, "sawtooth", 0.012),
+      onRide: (d) => {
+        player.root.rotation.y += d;
+        look.yaw += d;
+      },
+    });
+    roomId = castle.roomAt(playerPos);
+    if (playing && !transitioning && castle.exitAt(playerPos) === "courtyard") travel("courtyard", "castle");
+  } else if (room) {
     room.update(elapsed);
     roomIdentity?.update(elapsed);
     activityProps?.update(elapsed);
@@ -2043,7 +2289,7 @@ function frame(now) {
   }
 }
 // test and debugging hooks (harmless in play)
-window.__hp = { world, travel, get playerPos() { return playerPos; }, get entities() { return entities; }, get state() { return state; }, get zone() { return zone; }, look };
+window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get state() { return state; }, get zone() { return zone; }, look };
 applyPreferences();
 setQuality(quality);
 refreshHUD();

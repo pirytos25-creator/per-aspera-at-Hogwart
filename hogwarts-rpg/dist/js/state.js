@@ -189,7 +189,7 @@ export function advance(s, stage) {
   return true;
 }
 export function record(s, key, id) {
-  if (!["levitated", "runes", "defeated", "collected", "visited", "roomsCompleted"].includes(key) || s[key].includes(id)) return false;
+  if (!["levitated", "runes", "defeated", "collected", "visited", "roomsCompleted", "found"].includes(key) || s[key].includes(id)) return false;
   s[key].push(id);
   return true;
 }
