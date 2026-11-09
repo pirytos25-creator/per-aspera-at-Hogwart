@@ -136,7 +136,8 @@ export function newState() {
     mastery: {},
     lessons: {},
     found: [],
-    quality: "ultra",
+    quality: "high",
+    qualityManual: false,
     sound: false,
     largeText: false,
     highContrast: false,
@@ -156,6 +157,7 @@ export function hydrate(raw) {
   d.sound = raw.sound === true;
   for (const key of ["largeText", "highContrast", "reducedMotion"]) d[key] = raw[key] === true;
   d.quality = ["ultra", "high", "balanced"].includes(raw.quality) ? raw.quality : "high";
+  d.qualityManual = raw.qualityManual === true;
   for (const key in d.talents) d.talents[key] = Math.min(3, Math.max(0, Math.floor(finite(raw.talents?.[key]))));
   for (const key in d.duels) d.duels[key] = Math.min(999, Math.max(0, Math.floor(finite(raw.duels?.[key]))));
   for (const [store, max] of [["mastery", 3], ["lessons", 99]])
@@ -251,8 +253,13 @@ export function segmentBlocked(a, b, colliders, floor = 0, inside = false) {
       y = a.y + (b.y - a.y) * t,
       z = a.z + (b.z - a.z) * t;
     for (const c of colliders) {
-      const top = c.height ?? (inside ? 1.35 : c.r === 4.55 ? 3.4 : 80);
-      if (y > floor + top || y < floor - 0.2) continue;
+      // castle colliders carry their own vertical extent (y0..y1; furniture stops bolts up to `top`)
+      if (c.y0 !== undefined) {
+        if (y < c.y0 - 0.2 || y > (c.top ?? c.y1)) continue;
+      } else {
+        const top = c.height ?? (inside ? 1.35 : c.r === 4.55 ? 3.4 : 80);
+        if (y > floor + top || y < floor - 0.2) continue;
+      }
       const hit = c.r ? Math.hypot(x - c.x, z - c.z) < c.r : Math.abs(x - c.x) < c.w / 2 && Math.abs(z - c.z) < c.d / 2;
       if (hit) return { x, y, z };
     }

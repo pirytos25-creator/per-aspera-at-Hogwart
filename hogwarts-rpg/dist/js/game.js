@@ -123,7 +123,7 @@ const sky = createSky(scene),
   environment = enhanceEnvironment(world, renderer),
   graphics = createGraphics(renderer, scene, camera),
   effects = createEffects(scene, (a, b) =>
-    segmentBlocked(a, b, getColliders(), room ? 0 : zone === "courtyard" ? 26.4 : height(a.x, a.z), !!room),
+    segmentBlocked(a, b, getColliders(), room ? 0 : zone === "courtyard" ? 26.4 : height(a.x, a.z), !!room || zone === "castle"),
   ),
   audio = createAudio();
 scene.environment = sky.createEnvironment(renderer);
@@ -221,6 +221,17 @@ function populateCastleRoom(slot) {
     before = entities.length,
     ownedBefore = owned.length;
   const at = (lx, lz) => W(lx, lz);
+  // the room may load while you are still on the stairs: its people and props belong on its own floor
+  placeY = slot.y;
+  try {
+    fillCastleRoom(slot, info, at);
+  } finally {
+    placeY = null;
+  }
+  for (const e of entities.slice(before)) e.slotRoom = slot.id;
+  slot.owned = owned.slice(ownedBefore);
+}
+function fillCastleRoom(slot, info, at) {
   if (info.professor) {
     const { teacher, opts } = professorOptions(slot.id, info);
     const tp = slot.loaded.room.teacherPosition || [0, 0, -10];
@@ -249,14 +260,18 @@ function populateCastleRoom(slot) {
     agata.actor.root.rotation.y = slot.ry;
     agata.actor.read(true);
   }
-  for (const e of entities.slice(before)) e.slotRoom = slot.id;
-  slot.owned = owned.slice(ownedBefore);
 }
 function clearCastleRoom(slot) {
   const gone = entities.filter((e) => e.slotRoom === slot.id);
   for (const e of gone) {
     if (e.actor) {
       e.actor.dispose();
+      e.actor.root.traverse((o) => {
+        if (o.isSprite) {
+          o.material.map?.dispose();
+          o.material.dispose();
+        }
+      });
       zoneGroup.remove(e.actor.root);
       actors = actors.filter((a) => a !== e);
     }
@@ -266,6 +281,7 @@ function clearCastleRoom(slot) {
   for (const o of slot.owned || []) {
     zoneGroup.remove(o);
     o.geometry?.dispose();
+    if (o.isSprite) o.material.map?.dispose();
     o.material?.dispose?.();
   }
   owned = owned.filter((o) => !(slot.owned || []).includes(o));
@@ -387,8 +403,9 @@ guideMesh.visible = false;
 const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z),
   clamp = T.MathUtils.clamp,
   damp = (a, b, rate, dt) => T.MathUtils.lerp(a, b, 1 - Math.exp(-rate * dt));
+let placeY = null; // floor level for things being placed in a castle room
 function height(x, z) {
-  return zone === "courtyard" ? 26.4 : room ? 0 : zone === "castle" ? castle.floorAt(x, z, playerPos.y) : Math.max(world.groundHeight(x, z), 1);
+  return zone === "courtyard" ? 26.4 : room ? 0 : zone === "castle" ? (placeY ?? castle.floorAt(x, z, playerPos.y)) : Math.max(world.groundHeight(x, z), 1);
 }
 function position(x, z, y = 0) {
   return V(x, height(x, z) + y, z);
@@ -656,21 +673,7 @@ function populate() {
   } else if (room) {
     const info = ROOMS.find((r) => r.id === roomId);
     if (info.professor) {
-      const teacher =
-        roomId === "charms" ? "flitwick" : roomId === "potions" ? "snape" : roomId === "great-hall" ? "dumbledore" : "teacher";
-      const opts =
-        teacher === "flitwick"
-          ? { color: "#ac9a7b", scale: 0.85, beard: true, hair: "#c0b8aa", style: "short" }
-          : teacher === "snape"
-            ? { color: "#444b49", robe: "#182024", hair: "#171819", style: "long", skin: "#d2b39b" }
-            : {
-                color: info.color || "#b59a6a",
-                hat: teacher === "dumbledore",
-                beard: teacher === "dumbledore",
-                hair: "#b6b3a7",
-                style: teacher === "dumbledore" ? "long" : "short",
-                eyes: teacher === "dumbledore" ? "#4d6d8c" : "#4b3a28",
-              };
+      const { teacher, opts } = professorOptions(roomId, info);
       const tp = room.teacherPosition || [0, 0, -10];
       npc(teacher, info.professor, tp[0], tp[2], opts);
     }
@@ -839,12 +842,23 @@ function travel(destination, arrive = null) {
   transitioning = true;
   $("#fade").style.opacity = "1";
   setTimeout(async () => {
-    switchZone(destination, arrive);
-    save();
-    // build shaders for the new place before the fade lifts (avoids a hitch on first entry)
     try {
+      switchZone(destination, arrive);
+      save();
+      // build shaders for the new place before the fade lifts (avoids a hitch on first entry)
       await Promise.race([renderer.compileAsync?.(scene, camera), new Promise((r) => setTimeout(r, 2500))]);
-    } catch {}
+    } catch (error) {
+      console.error(error);
+      // a place that fails to load must not leave the screen black: go back to the courtyard
+      if (destination !== "courtyard") {
+        try {
+          switchZone("courtyard");
+          toast("Nie udało się wczytać tego miejsca. Wracasz na dziedziniec.");
+        } catch (again) {
+          console.error(again);
+        }
+      }
+    }
     setTimeout(() => {
       $("#fade").style.opacity = "0";
       transitioning = false;
@@ -971,9 +985,8 @@ function chooseLine(choice) {
   rig.playerLine();
   const seconds = player.say?.(words) || 1;
   dialogueLine = null;
-  setTimeout(() => {
-    if (dialogueNpc) choice.action();
-  }, Math.min(1700, 350 + seconds * 900));
+  const npc = dialogueNpc;
+  dialogueLater(Math.min(1700, 350 + seconds * 900), () => dialogueNpc === npc && choice.action());
 }
 function say(npc, role, text, choices) {
   const here = npc.slotRoom || roomId;
@@ -1290,7 +1303,7 @@ function targetForSpell() {
         e.pos.clone().add(V(0, e.type === "stone" ? 0.1 : 1.2, 0)),
         getColliders(),
         height(playerPos.x, playerPos.z),
-        !!room,
+        !!room || zone === "castle",
       )
     ) {
       const s = dot * 30 - distance * 0.3;
@@ -1374,6 +1387,8 @@ function lessonLine(n, text) {
   n.actor?.say?.(text);
 }
 function runLesson(n, role, opts) {
+  for (const t of dialogueTimers) clearTimeout(t);
+  dialogueTimers = [];
   $("#speaker-role").textContent = role;
   lessonLine(n, opts.intro);
   n.actor.setExpression?.("focus");
@@ -1605,6 +1620,14 @@ function knockedDown(dir, out = false) {
 }
 function hurt(amount, dir = null) {
   if (elapsed < dodgeUntil || elapsed < downUntil) return;
+  if (amount <= 0 && elapsed >= shieldUntil) {
+    rig.shake(0.1);
+    player.hit(!dir || facingVec().dot(dir) < 0);
+    player.setExpression?.("surprised", 1.2);
+    effects.sparks(playerPos.clone().add(V(0, 1.3, 0)), "#f4efe2", 26, 1.6);
+    audio.note(520, 0.12, "triangle", 0.03);
+    return;
+  }
   if (elapsed < shieldUntil) {
     effects.ring(playerPos.clone().add(V(0, 0.4, 0)), "#a6ebff", 2, 0.35);
     mana = Math.min(stats(state).mana, mana + 5);
@@ -1857,7 +1880,7 @@ function updateActors(dt) {
 function objectiveEntity() {
   const stage = state.stage;
   if (stage === 0) return entities.find((e) => e.id === "minerva");
-  if (stage === 1) return entities.find((e) => e.id === "flitwick" || e.id === "charms-door");
+  if (stage === 1) return entities.find((e) => e.id === "flitwick") || entities.find((e) => e.id === "charms-door");
   if (stage === 2)
     return entities.find((e) => e.type === "stone" && !state.levitated.includes(e.id)) || entities.find((e) => e.id === "charms-door");
   if (stage === 3)
@@ -2162,7 +2185,10 @@ function showMenu() {
       )}</select></div><div class="settings-row"><div>Pora dnia<small>Zmiana dotyczy otoczenia zamku.</small></div><button id="change-time">${["Złota godzina", "Noc", "Poranek"][timeMode]} ↻</button></div><div class="settings-row"><div>Dźwięk<small>Subtelne tło, kroki i dźwięki zaklęć.</small></div><button id="sound-toggle">${audio.enabled ? "Włączony" : "Wyłączony"}</button></div><div class="menu-buttons"><button class="primary" id="resume">Wróć do gry →</button><button id="controls-help">Sterowanie</button><button id="accessibility">Dostępność</button><button id="about-game">O projekcie</button><button id="return-title">Ekran tytułowy</button></div>`,
     "PAUZA",
   );
-  $("#quality-select").onchange = (e) => setQuality(e.target.value, true);
+  $("#quality-select").onchange = (e) => {
+    state.qualityManual = true;
+    setQuality(e.target.value, true);
+  };
   $("#change-time").onclick = () => {
     timeMode = (timeMode + 1) % 3;
     setLighting();
@@ -2256,7 +2282,8 @@ function start(resume = false) {
         '<h2>Nowa przygoda?</h2><p>Rozpoczęcie nowej przygody zastąpi zapis tej gry w tej przeglądarce. Zapis atlasu pozostanie bez zmian.</p><div class="menu-buttons"><button class="primary" id="confirm-new">Rozpocznij od nowa</button><button id="cancel-new">Zachowaj zapis</button></div>',
       );
       $("#confirm-new").onclick = () => {
-        state = newState();
+        const keep = Object.fromEntries(["quality", "qualityManual", "sound", "largeText", "highContrast", "reducedMotion"].map((k) => [k, state[k]]));
+        state = Object.assign(newState(), keep);
         $("#panel").close();
         start(false);
       };
@@ -2428,7 +2455,7 @@ let last = performance.now(),
   frameSeconds = 0,
   uiTick = 0,
   slowSeconds = 0,
-  adapted = false;
+  adapted = 0;
 function frame(now) {
   requestAnimationFrame(frame);
   const wallDt = Math.min((now - last) / 1000, 0.1);
@@ -2476,7 +2503,7 @@ function frame(now) {
       const t = now / 1000;
       updateDialogue(wallDt);
       player.update(wallDt, t, 0, player.speaking?.());
-      for (const n of actors) n.actor.update(wallDt, t, 0, n === dialogueNpc && n.actor.speaking?.());
+      for (const n of actors) if (!n.life || n.active) n.actor.update(wallDt, t, 0, n === dialogueNpc && n.actor.speaking?.());
     }
   }
   lessons.update(wallDt);
@@ -2513,19 +2540,24 @@ function frame(now) {
   frameSeconds += wallDt;
   if (frameSeconds >= 2) {
     const fps = Math.round(frames / frameSeconds);
-    // dynamic resolution keeps the effects and trades a little sharpness when frames get slow
+    // Slow frames: first trade a little sharpness (dynamic resolution), then step the quality down.
+    // A level the player picked in the settings is left alone.
+    const r = graphics.resolutionScale;
     if (running && !document.hidden) {
-      const r = graphics.resolutionScale;
-      if (fps < 40 && r > 0.6) graphics.setResolutionScale(r - 0.1);
+      if (fps < 40 && r > 0.7) graphics.setResolutionScale(Math.max(0.7, r - 0.1));
       else if (fps > 56 && r < 1) graphics.setResolutionScale(r + 0.05);
     }
     $("#fps").textContent = fps + " FPS";
-    if (running && !adapted && quality === "high" && fps < 29) slowSeconds += frameSeconds;
+    if (running && !state.qualityManual && adapted < 2 && quality !== "balanced" && fps < 27 && r <= 0.71) slowSeconds += frameSeconds;
     else slowSeconds = 0;
     if (slowSeconds > 6) {
-      adapted = true;
-      setQuality("balanced");
-      toast("Włączono tryb Płynność. Ultra możesz wybrać w ustawieniach.");
+      adapted++;
+      slowSeconds = 0;
+      const next = quality === "ultra" ? "high" : "balanced";
+      setQuality(next);
+      graphics.setResolutionScale(1);
+      save();
+      toast(next === "high" ? "Grafika: Wysoka, żeby gra działała płynniej. Poziom zmienisz w ustawieniach." : "Włączono tryb Płynność. Poziom grafiki zmienisz w ustawieniach.");
     }
     frames = 0;
     frameSeconds = 0;

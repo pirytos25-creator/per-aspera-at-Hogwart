@@ -11,3 +11,17 @@ test('fountain collision keeps walking character out of the bowl',()=>{const p=m
 test('spells stop at walls but clear low practice furniture',()=>{const a={x:0,y:1.5,z:0},b={x:4,y:1.5,z:0};assert.ok(segmentBlocked(a,b,[{x:2,z:0,w:.3,d:4,height:3}],0,true));assert.equal(segmentBlocked(a,b,[{x:2,z:0,w:1,d:4,height:1.1}],0,true),null);assert.ok(segmentBlocked({x:23,y:28,z:38},{x:23,y:28,z:24},[{x:23,z:31,r:4.55}],26.4));});
 test('old saves get room progress and accessibility defaults without losing their chapter',()=>{const s=hydrate({version:1,stage:3,xp:210,quality:'ultra'});assert.deepEqual(s.roomsCompleted,[]);assert.equal(s.largeText,false);assert.equal(s.stage,3);const next=hydrate({...s,largeText:true,highContrast:true,reducedMotion:true});assert.ok(next.largeText&&next.highContrast&&next.reducedMotion);});
 test('castle discoveries, duel wins and spell mastery survive a save',()=>{const s=newState();assert.equal(record(s,'found','page-hall'),true);assert.equal(record(s,'found','page-hall'),false);s.duels.ada=2;s.mastery.lumos=3;s.mastery['bad key!']=2;s.lessons.lumos=4;const loaded=hydrate(JSON.parse(JSON.stringify({...s,mastery:{...s.mastery,leviosa:9}})));assert.deepEqual(loaded.found,['page-hall']);assert.equal(loaded.duels.ada,2);assert.equal(loaded.mastery.lumos,3);assert.equal(loaded.mastery.leviosa,3);assert.equal(loaded.mastery['bad key!'],undefined);assert.equal(loaded.lessons.lumos,4);});
+test('castle colliders stop bolts only within their own height',()=>{
+  const desk={x:0,z:0,w:2,d:1,y0:8,y1:10.2,top:9.1},wall={x:5,z:0,w:1,d:6,y0:8,y1:15,wall:true};
+  // a bolt at chest height passes over a low desk but not through a wall
+  assert.equal(segmentBlocked({x:-3,y:9.5,z:0},{x:3,y:9.5,z:0},[desk],8,true),null);
+  assert.ok(segmentBlocked({x:-3,y:8.6,z:0},{x:3,y:8.6,z:0},[desk],8,true));
+  assert.ok(segmentBlocked({x:3,y:12,z:0},{x:7,y:12,z:0},[wall],8,true));
+  // the same furniture one floor down does not block a bolt upstairs
+  assert.equal(segmentBlocked({x:-3,y:17,z:0},{x:3,y:17,z:0},[desk],16,true),null);
+});
+test('graphics level: new players start on Wysoka and a manual choice is remembered',()=>{
+  assert.equal(newState().quality,'high');
+  assert.equal(hydrate({version:1,quality:'ultra',qualityManual:true}).qualityManual,true);
+  assert.equal(hydrate({version:1,quality:'ultra'}).qualityManual,false);
+});

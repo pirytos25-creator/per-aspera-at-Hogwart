@@ -429,14 +429,17 @@ export function createLessons({ scene, audio, camera }) {
       L.react?.(false, r);
       status(r.tooShort ? "Za krótko. Wykonaj pełny, wyraźny ruch na całej karcie." : r.reversed ? "Kształt dobry, ale ruch idzie w przeciwną stronę. Zacznij od zielonego punktu." : pct > 45 ? "Blisko. " + L.P.hint : "To jeszcze nie ten ruch. " + L.P.hint);
     }
+    L.judging = true;
     await wait(1250);
+    L.judging = false;
     return ok;
   }
   async function loop() {
     const L = run;
     await demonstrate();
     while (run === L && L.successes < L.needed && L.attempts < L.maxAttempts) {
-      if (L.busy) await wait(200);
+      while (run === L && L.busy) await wait(100);
+      if (run !== L) return;
       const ok = await attempt();
       if (ok === null) return;
       // after two misses in a row the professor shows the movement once more
@@ -459,10 +462,13 @@ export function createLessons({ scene, audio, camera }) {
     resolveStroke?.(null);
     resolveStroke = null;
     stroke = pendingStroke = null;
+    // nobody is left drawing in the air
+    L?.player?.traceLive?.(false);
+    L?.teacher?.traceLive?.(false);
     L?.onDone?.(result);
   }
   $("#lesson-again").onclick = async () => {
-    if (!run || run.busy) return;
+    if (!run || run.busy || run.judging || stroke) return;
     const r = resolveStroke;
     resolveStroke = null;
     run.redo = true;
@@ -493,7 +499,11 @@ export function createLessons({ scene, audio, camera }) {
       document.body.classList.add("lesson-on");
       board();
       pips();
-      loop();
+      const L = run;
+      loop().catch((error) => {
+        console.error(error);
+        if (run === L) finish({ passed: false, cancelled: true, by: "error", attempts: L.attempts, successes: L.successes, best: L.best });
+      });
     },
     cancel() {
       if (run) finish({ passed: false, cancelled: true, by: "close", attempts: run.attempts, successes: run.successes, best: run.best });

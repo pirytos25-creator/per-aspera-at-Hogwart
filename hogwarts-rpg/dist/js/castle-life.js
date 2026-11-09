@@ -57,7 +57,7 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
   const label=labelSprite(def.name);label.position.y=2.65/(def.look.scale||1);actor.root.add(label);
   scene.add(actor.root);
   const e={id:def.id,type:'npc',name:def.name,role:def.role,lines:def.lines,pos:actor.root.position,actor,life:true,band:def.band,mood:def.mood||'kind',
-   state:'idle',timer:1+Math.random()*4,goal:null,motion:{speed:0},seat:null,partner:null,waved:0,lane:def.lane||0};
+   state:'idle',timer:1+Math.random()*4,goal:null,motion:{speed:0},seat:null,partner:null,waved:-100,lane:def.lane||0};
   people.push(e);return e;
  }
  for(const [band,n] of Object.entries(POP))for(let i=0;i<n;i++){const d=student(band,i);d.lane=i%LANES[band].length;make(d,pointOn(LANES[band][d.lane],(Math.random()-.5)*2.4));}
@@ -100,7 +100,13 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
   return best;
  }
  function freePartner(e){return people.find(o=>o!==e&&!o.ghost&&!o.patrol&&o.band===e.band&&o.state==='idle'&&!o.partner&&o.pos.distanceTo(e.pos)<20);}
+ function release(e){
+  if(e.seat&&e.state!=='sit'){e.seat.taken=null;e.seat=null;}
+  if(e.partner&&e.state!=='chat'){const o=e.partner;e.partner=null;if(o.partner===e){o.partner=null;if(o.after==='chat')o.after=null;}}
+  e.after=null;
+ }
  function decide(e){
+  release(e);
   if(e.ghost){const lane=LANES[e.band][0];const p=pointOn(lane,(Math.random()-.5)*14);p.y=FLOORS.F2+.25;walkTo(e,p);return;}
   if(e.patrol){walkTo(e,pointOn(LANES[e.band][0],(Math.random()-.5)*2));return;}
   const r=Math.random();
@@ -140,12 +146,18 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
      const speed=e.ghost?.75:e.patrol?1.05:1.15+((e.id.length%3)*.08);
      if(len<.25){e.motion.speed=0;e.state='idle';e.timer=1+Math.random()*3;
       if(e.after==='sit'&&e.seat){const f=e.seat.face;e.actor.root.rotation.y=f;e.pos.set(e.seat.pos.x+Math.sin(f)*.1,e.seat.pos.y,e.seat.pos.z+Math.cos(f)*.1);e.actor.sit(true,Math.random()<.5);e.state='sit';e.timer=12+Math.random()*20;}
-      else if(e.after==='chat'&&e.partner){e.state='chat';e.timer=9+Math.random()*9;const o=e.partner;e.actor.root.rotation.y=Math.atan2(o.pos.x-e.pos.x,o.pos.z-e.pos.z);e.actor.lookAt(o.actor.head);}
+      else if(e.after==='chat'&&e.partner&&e.partner.partner===e&&e.partner.pos.distanceTo(e.pos)<3.2){e.state='chat';e.timer=9+Math.random()*9;const o=e.partner;e.actor.root.rotation.y=Math.atan2(o.pos.x-e.pos.x,o.pos.z-e.pos.z);e.actor.lookAt(o.actor.head);}
       e.after=e.after==='chat'||e.after==='sit'?null:e.after;
      }else{
       d.normalize();
       if(e.ghost){e.pos.x+=d.x*speed*dt;e.pos.z+=d.z*speed*dt;e.pos.y=FLOORS.F2+.25+Math.sin(time*1.3)*.06;}
-      else{const p=castle.move(e.pos,d.x*speed*dt,d.z*speed*dt,.3);if(Math.hypot(p.x-e.pos.x,p.z-e.pos.z)<speed*dt*.25){e.stuck=(e.stuck||0)+dt;if(e.stuck>1.5){e.stuck=0;e.state='idle';e.timer=.5;}}else e.stuck=0;e.pos.set(p.x,p.y,p.z);}
+      else{
+       // people step aside for you instead of walking through you
+       const ahead=pd<1.05&&(toPlayer.x*d.x+toPlayer.z*d.z)>pd*.35;
+       if(ahead){e.motion.speed=0;e.wait=(e.wait||0)+dt;if(e.wait>2.5){e.wait=0;release(e);e.state='idle';e.timer=.4;}
+        const yawP=Math.atan2(d.x,d.z),df=Math.atan2(Math.sin(yawP-e.actor.root.rotation.y),Math.cos(yawP-e.actor.root.rotation.y));e.actor.root.rotation.y+=df*(1-Math.exp(-6*dt));continue;}
+       e.wait=0;
+       const p=castle.move(e.pos,d.x*speed*dt,d.z*speed*dt,.3);if(Math.hypot(p.x-e.pos.x,p.z-e.pos.z)<speed*dt*.25){e.stuck=(e.stuck||0)+dt;if(e.stuck>1.5){e.stuck=0;release(e);e.state='idle';e.timer=.5;}}else e.stuck=0;e.pos.set(p.x,p.y,p.z);}
       const yaw=Math.atan2(d.x,d.z),diff=Math.atan2(Math.sin(yaw-e.actor.root.rotation.y),Math.cos(yaw-e.actor.root.rotation.y));
       e.actor.root.rotation.y+=diff*(1-Math.exp(-6*dt));
       e.motion.speed=e.ghost?0:speed;

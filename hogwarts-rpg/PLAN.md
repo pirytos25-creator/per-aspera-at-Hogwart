@@ -149,3 +149,31 @@ Wszystko w WebAudio, bez plików, z poszanowaniem ustawienia dźwięku:
 - **Komputer Maćka:**
   - testy na prawdziwej karcie graficznej przez Claude in Chrome;
   - wypiek światła w Blenderze dla Wielkiej Sali.
+
+## Przegląd kodu z 9 listopada 2026 (Fable 5.2) i co z niego wynika
+
+Naprawione w tym przeglądzie:
+- Profesor i rekwizyty sali w lochach „wisiały” w powietrzu, gdy sala doczytała się, kiedy gracz był jeszcze na schodach.
+- Zaklęcia w salach zamku zatrzymywały się na każdym meblu, bez względu na jego wysokość (nie dało się trafić kamienia za ławką).
+- Kurz w powietrzu przyspieszał z każdą minutą gry.
+- Uczniowie blokowali ławki i partnerów do rozmowy, gdy plan im się nie udał; przechodzili przez gracza.
+- Kreda Szelmy wywoływała czerwony błysk obrażeń i tryb walki.
+- Kamera rozmów gubiła kompozycję po sekundzie, a „oddech” kamery nie działał.
+- Przerwana lekcja zostawiała rękę postaci w powietrzu; przycisk „Pokaż ponownie” mógł zderzyć się z oceną próby.
+- Nieudane wczytanie miejsca mogło zostawić czarny ekran.
+- Dwie sale budowane w jednej klatce robiły przycięcie na korytarzu (teraz doczytują się po kolei).
+- Grafika: nowy gracz startuje na „Wysokiej”; gra sama schodzi poziom niżej, gdy brakuje klatek, a wybór z ustawień zostawia w spokoju.
+
+Większe rzeczy, do których Fable 5.2 nadaje się najlepiej (długa, samodzielna praca z wieloma krokami i sprawdzaniem wyniku):
+
+| Nr | Zadanie | Po co |
+|---|---|---|
+| F1 | Lżejsze postacie z daleka: w Blenderze połączyć części dalekiego modelu w jedną siatkę | Postać to dziś ok. 20–30 osobnych rysowań. Po zmianie daleka postać to 3–5. Największy zysk klatek w tłumie (Wielka Sala, korytarze). |
+| F2 | Automatyczny gracz testowy: bot przechodzi rozdział I, zamek, lekcję i pojedynek po każdej zmianie | Złapałby sam błędy takie jak wiszący profesor. Bez tego każdą funkcję sprawdza się ręcznie. |
+| F3 | Podział `game.js` (ponad 2500 linii) na moduły: rozmowy, walka, zadania, interfejs, strefy | Mniej błędów przy rozdziale II i kolejnych funkcjach; łatwiejsze testy. |
+| F4 | Reżyserowane scenki: mały język osi czasu dla kamery (najazd, kran, zmiana ostrości), postaci i dźwięku | Sceny fabularne „jak w Wiedźminie 3” zamiast samych rozmów; potrzebne do rozdziału II. |
+| F5 | Nawigacja postaci po całym zamku: graf przejść, schody, plan dnia (lekcje, posiłki, cisza nocna) | Uczniowie chodzą między piętrami i na lekcje, a nie tylko po jednym korytarzu. Podstawa nocy w zamku (punkt 3). |
+| F6 | Pomiar wydajności na komputerze Maćka: czas klatki z podziałem na etapy, sprawdzenie, której karty używa przeglądarka | RTX 4050 powinien dawać dużo więcej niż 14–30 klatek. Trzeba ustalić przyczynę, zanim dojdzie Wielka Sala. |
+
+Punkty 4 (Wielka Sala) i 12 (twarze) z listy wyżej też są zadaniami tego typu: wymagają wielu rund „zbuduj w Blenderze → wyrenderuj → obejrzyj → popraw”.
+

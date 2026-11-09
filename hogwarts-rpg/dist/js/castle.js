@@ -438,7 +438,7 @@ void main(){vec4 mv=modelViewMatrix*vec4(position,1.);float f=.86+.1*sin(time*11
  const dustMat=new T.ShaderMaterial({uniforms:{time:{value:0},center:{value:new T.Vector3()},box:{value:new T.Vector3(18,7,18)},scale:{value:400},strength:{value:.8}},
   vertexShader:`attribute vec4 seed;uniform float time;uniform vec3 center;uniform vec3 box;uniform float scale;varying float vA;
 void main(){
- vec3 drift=vec3(sin(time*.11+seed.w*6.)*.6,-.05-seed.w*.06,cos(time*.09+seed.x*6.)*.6)*time;
+ vec3 drift=vec3((seed.w-.5)*.07,-.025-seed.y*.03,(seed.x-.5)*.07)*time+vec3(sin(time*.21+seed.w*6.),0.,cos(time*.17+seed.x*6.))*.35;
  vec3 p=mod(seed.xyz*box+drift-center+box*.5,box)-box*.5+center;
  p+=vec3(sin(time*.7+seed.y*20.),sin(time*.5+seed.z*20.),cos(time*.6+seed.x*20.))*.06;
  vec3 q=(p-center)/(box*.5);vA=(1.-smoothstep(.6,1.,max(abs(q.x),max(abs(q.y),abs(q.z)))))*(.35+.65*seed.w);
@@ -481,7 +481,7 @@ void main(){
   const inTower=Math.abs(x)<14.2&&Math.abs(z)<14.2;
   if(inTower)return 'T';
   if(y<-3.5)return 'D';
-  if(y<4)return x>14&&z>30?'G':'G';
+  if(y<4)return 'G';
   return y<12?'F1':y<20?'F2':'F3';
  }
 
@@ -498,7 +498,7 @@ void main(){
   const ry=slot.ry,cx=slot.center.x,cz=slot.center.z,swap=Math.abs(Math.sin(ry))>.5;
   const toWorld=(x,z)=>{const [a,b]=rot2(x,z,ry);return [cx+a,cz+b];};
   const cols=[];
-  for(const c of [...room.colliders,{x:8.6,z:13.8,w:1.65,d:1.2,height:1.1}]){const [x,z]=toWorld(c.x,c.z);cols.push(c.r?{x,z,r:c.r,y0:slot.y,y1:slot.y+(c.height??2.2),band:slot.band,room:slot.id}:{x,z,w:swap?c.d:c.w,d:swap?c.w:c.d,y0:slot.y,y1:slot.y+(c.height??2.2),band:slot.band,room:slot.id});}
+  for(const c of [...room.colliders,{x:8.6,z:13.8,w:1.65,d:1.2,height:1.1}]){const [x,z]=toWorld(c.x,c.z);const top=slot.y+(c.height??1.35);cols.push(c.r?{x,z,r:c.r,y0:slot.y,y1:slot.y+(c.height??2.2),top,band:slot.band,room:slot.id}:{x,z,w:swap?c.d:c.w,d:swap?c.w:c.d,y0:slot.y,y1:slot.y+(c.height??2.2),top,band:slot.band,room:slot.id});}
   // perimeter walls for the camera
   for(const [lx,lz,w,d] of [[0,-18.2,29,.6],[-14.3,0,.6,37],[14.3,0,.6,37],[-8.2,18.2,12.6,.6],[8.2,18.2,12.6,.6]]){const [x,z]=toWorld(lx,lz);cols.push({x,z,w:swap?d:w,d:swap?w:d,y0:slot.y,y1:slot.y+14,band:slot.band,room:slot.id,wall:true});}
   walls.push(...cols);
@@ -526,7 +526,7 @@ void main(){
  const POOL=8,pool=[];let lightBudget=POOL;
  for(let i=0;i<POOL;i++){const l=new T.PointLight('#ffb45e',0,12,2);group.add(l);pool.push({light:l,anchor:null,w:0});}
  const ambient=new T.HemisphereLight('#d8cdb6','#4a3b2e',.95);group.add(ambient);
- let lightTimer=0;
+ let lightTimer=0,loadTimer=0;
 
  const api={
   group,slots,regions,walls,platforms,anchors,seats,hourglasses,towerDoor,pages:PAGES,passage,
@@ -560,12 +560,14 @@ void main(){
    // visibility: your floor, the tower, and the entrance hall around the ground floor
    for(const [k,g] of Object.entries(bands))g.visible=k===band||k==='T'||(k==='G'&&(band==='D'||band==='T'))||(band==='T'&&k!=='D')||(band==='G'&&k==='D'&&player.x>12);
    // rooms on your floor stream in around their doors
+   loadTimer-=dt;let next=null,nd=26;
    for(const s of slots){
-    const near=Math.abs(s.y-player.y)<3.5&&Math.hypot(s.door.x-player.x,s.door.z-player.z)<26;
-    const far=Math.abs(s.y-player.y)>3.5||Math.hypot(s.door.x-player.x,s.door.z-player.z)>44;
-    if(near&&!s.loaded)loadRoom(s);else if(far&&s.loaded&&api.roomAt(player)!==s.id)unloadRoom(s);
+    const dd=Math.hypot(s.door.x-player.x,s.door.z-player.z),level=Math.abs(s.y-player.y)<3.5;
+    const far=!level||dd>44;
+    if(level&&!s.loaded&&dd<nd){nd=dd;next=s;}else if(far&&s.loaded&&api.roomAt(player)!==s.id)unloadRoom(s);
     if(s.loaded){s.loaded.holder.visible=Math.abs(s.y-player.y)<3.5;s.loaded.room.update(time);s.loaded.identity.update(time);s.loaded.props.update(time);}
    }
+   if(next&&(loadTimer<=0||nd<7)){loadRoom(next);loadTimer=.2;}
    // turning platforms
    for(const p of platforms){
     p.timer-=dt;
