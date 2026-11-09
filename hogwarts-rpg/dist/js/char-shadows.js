@@ -59,7 +59,8 @@ void main(){
   const clear = new T.Color(),
     white = new T.Color(1, 1, 1),
     m = new T.Matrix4();
-  let terrainTimer = 0;
+  let terrainTimer = 0,
+    frame = 0;
   return {
     get enabled() {
       return enabled;
@@ -75,9 +76,11 @@ void main(){
       decal.visible = enabled;
     },
     // center: the player; dir: unit vector towards the light; ground(x,z): optional terrain height
-    update(center, dir, floorY, { strength = 0.5, ground = null, active = true } = {}) {
+    update(center, dir, floorY, { strength = 0.5, ground = null, active = true, every = 1 } = {}) {
       decal.visible = enabled && active;
       if (!decal.visible) return;
+      // on lighter settings the silhouettes are redrawn every other frame
+      if (every > 1 && frame++ % every) return;
       // snap to texels so shadow edges do not crawl while walking
       const snap = (extent * 2) / size;
       const cx = Math.round(center.x / snap) * snap,

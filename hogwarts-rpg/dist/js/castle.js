@@ -1,4 +1,5 @@
 import * as T from '../assets/three.module.js';
+import {batchStatic} from './batch.js';
 import {mergeGeometries} from '../assets/addons/utils/BufferGeometryUtils.js';
 
 // A walkable castle interior: Entrance Hall, the great staircase tower with platforms that
@@ -118,7 +119,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
  function torch(band,x,y,z,nx,nz,green=false){
   box(band,M.iron,x-nx*.12,y-.3,z-nz*.12,.08,.5,.08);
   const g=new T.ConeGeometry(.13,.35,8);g.translate(x+nx*.05,y,z+nz*.05);add(band,M.iron,g);
-  const f=new T.Mesh(new T.ConeGeometry(.1,.42,7),green?M.greenFlame:M.flame);f.position.set(x+nx*.06,y+.33,z+nz*.06);bands[band].add(f);
+  const f=new T.Mesh(new T.ConeGeometry(.1,.42,7),green?M.greenFlame:M.flame);f.position.set(x+nx*.06,y+.33,z+nz*.06);f.userData.noBatch=true;bands[band].add(f);
   animated.push({kind:'flame',mesh:f,phase:random()*9});
   const anchor={pos:new T.Vector3(x+nx*.5,y+.5,z+nz*.5),color:green?'#7fe6a0':'#ffb45e',intensity:green?14:19,distance:15,band,flicker:true,flame:f,face:Math.atan2(nx,nz)};
   anchors.push(anchor);
@@ -177,12 +178,13 @@ void main(){
  }
  const figureTex=canvasTex(128,256,(c,w,h)=>{c.fillStyle='#1d1a17';c.beginPath();c.ellipse(64,58,24,28,0,0,Math.PI*2);c.fill();c.beginPath();c.moveTo(30,250);c.quadraticCurveTo(26,120,64,92);c.quadraticCurveTo(102,120,98,250);c.fill();c.fillStyle='#c9a37e';c.beginPath();c.ellipse(64,60,15,19,0,0,Math.PI*2);c.fill();});
  const frameGeo=new T.BoxGeometry(1,1,.12);disposables.push(frameGeo,...paintTex,figureTex);
+ const paintMats=paintTex.map(t=>new T.MeshStandardMaterial({map:t,roughness:.85})),figureMat=new T.MeshStandardMaterial({map:figureTex,transparent:true,alphaTest:.3,roughness:.9});disposables.push(...paintMats,figureMat);
  function portrait(band,x,y,z,ry,w=1.4,h=1.8){
   const holder=new T.Group();holder.position.set(x,y,z);holder.rotation.y=ry;bands[band].add(holder);
   const frame=new T.Mesh(frameGeo,M.gold);frame.scale.set(w+.22,h+.22,1);holder.add(frame);
-  const canvas=new T.Mesh(new T.PlaneGeometry(w,h),new T.MeshStandardMaterial({map:paintTex[Math.floor(random()*paintTex.length)],roughness:.85}));canvas.position.z=.065;holder.add(canvas);
-  const fig=new T.Mesh(new T.PlaneGeometry(w*.42,h*.62),new T.MeshStandardMaterial({map:figureTex,transparent:true,alphaTest:.3,roughness:.9}));fig.position.set(0,-h*.18,.07);holder.add(fig);
-  disposables.push(canvas.geometry,canvas.material,fig.geometry,fig.material);
+  const canvas=new T.Mesh(new T.PlaneGeometry(w,h),paintMats[Math.floor(random()*paintMats.length)]);canvas.position.z=.065;holder.add(canvas);
+  const fig=new T.Mesh(new T.PlaneGeometry(w*.42,h*.62),figureMat);fig.position.set(0,-h*.18,.07);fig.userData.noBatch=true;holder.add(fig);
+  disposables.push(canvas.geometry,fig.geometry);
   animated.push({kind:'portrait',fig,w,phase:random()*20,speed:.2+random()*.3});
  }
  // ---------------------------------------------------------------- suits of armour that follow you with their helmets
@@ -195,7 +197,7 @@ void main(){
   P(sph,M.steel,0,1.42,0,.27,.42,.19);P(sph,M.steel,0,1.1,0,.24,.18,.17);
   P(cy,M.steel,-.34,1.35,0,.07,.62,.07).rotation.z=.15;P(cy,M.steel,.34,1.35,0,.07,.62,.07).rotation.z=-.15;
   P(sph,M.steel,-.3,1.72,0,.13,.09,.12);P(sph,M.steel,.3,1.72,0,.13,.09,.12);
-  const head=P(sph,M.steel,0,1.98,0,.13,.16,.14);
+  const head=P(sph,M.steel,0,1.98,0,.13,.16,.14);head.userData.noBatch=true;
   const visor=new T.Mesh(bx,M.iron);visor.scale.set(.18,.03,.06);visor.position.set(0,.02,.12);head.add(visor);
   const halb=P(cy,M.darkWood,.42,1.2,.1,.025,2.4,.025);const blade=new T.Mesh(bx,M.steel);blade.scale.set(.03,.35,.18);blade.position.y=1.15;halb.add(blade);
   walls.push({x,z,r:.45,y0:y,y1:y+2.3,band});
@@ -244,8 +246,8 @@ void main(){
   const glass=new T.Mesh(new T.CylinderGeometry(.42,.42,3.2,18,1,true),M.glass);glass.position.y=2.2;hg.add(glass);
   for(const y of [.55,3.85]){const cap=new T.Mesh(new T.CylinderGeometry(.55,.55,.22,18),M.gold);cap.position.y=y;hg.add(cap);}
   const gemMat=new T.MeshStandardMaterial({color:houseCols[i],emissive:houseCols[i],emissiveIntensity:.55,roughness:.25,metalness:.2});disposables.push(gemMat,glass.geometry);
-  const lower=new T.Mesh(new T.CylinderGeometry(.38,.38,1,16),gemMat);lower.position.y=.68;hg.add(lower);
-  const upper=new T.Mesh(new T.CylinderGeometry(.38,.38,1,16),gemMat);upper.position.y=3.72;hg.add(upper);
+  const lower=new T.Mesh(new T.CylinderGeometry(.38,.38,1,16),gemMat);lower.position.y=.68;lower.userData.noBatch=true;hg.add(lower);
+  const upper=new T.Mesh(new T.CylinderGeometry(.38,.38,1,16),gemMat);upper.position.y=3.72;upper.userData.noBatch=true;hg.add(upper);
   hourglasses.push({lower,upper,level:.25+random()*.5});
   walls.push({x:-12.2,z:17+i*1.7,r:.6,y0:G,y1:G+4,band:'G'});
  }
@@ -309,7 +311,7 @@ void main(){
  // turning platforms: each carries one flight up to the next gallery; they rotate between allowed landings
  const platforms=[];
  for(const [y,dirs] of [[4,[0,Math.PI/2,Math.PI]],[12,[0,Math.PI/2,-Math.PI/2]],[20,[Math.PI/2,Math.PI,-Math.PI/2]]]){
-  const piv=new T.Group();piv.position.set(0,0,0);bands.T.add(piv);
+  const piv=new T.Group();piv.position.set(0,0,0);piv.userData.noBatch=true;bands.T.add(piv);
   const deck=new T.Mesh(new T.BoxGeometry(6,.45,6),M.floor);deck.position.y=y-.225;piv.add(deck);disposables.push(deck.geometry);
   for(const [x,z] of [[-2.9,-2.9],[2.9,-2.9],[-2.9,2.9],[2.9,2.9]]){const p=new T.Mesh(new T.CylinderGeometry(.12,.12,1.1,8),M.gold);p.position.set(x,y+.55,z);piv.add(p);disposables.push(p.geometry);}
   const rot=new T.Group();piv.add(rot);
@@ -410,9 +412,12 @@ void main(){
  for(const {band,mat,geos} of buckets.values()){
   const merged=mergeGeometries(geos.map(g=>g.index?g.toNonIndexed():g),false);
   for(const g of geos)g.dispose();
-  const mesh=new T.Mesh(merged,mat);mesh.receiveShadow=true;mesh.castShadow=mat!==M.carpet;bands[band].add(mesh);disposables.push(merged);
+  const mesh=new T.Mesh(merged,mat);mesh.receiveShadow=true;mesh.castShadow=mat!==M.carpet;mesh.userData.noBatch=true;bands[band].add(mesh);disposables.push(merged);
  }
 
+ // ---------------------------------------------------------------- batching: one draw per material per floor
+ for(const g of Object.values(bands)){const b=batchStatic(g);disposables.push(b);}
+ for(const p of platforms){const b=batchStatic(p.piv);disposables.push(b);}
  // ---------------------------------------------------------------- torch halos (one draw call per floor)
  const haloMats=[];
  for(const [band,list] of Object.entries(halos)){
@@ -489,6 +494,7 @@ void main(){
   const identity=createRoomIdentity(info);room.group.add(identity.group);
   const props=createRoomActivityProps(slot.id,T);props.group.position.set(8.6,0,13.8);room.group.add(props.group);
   group.add(holder);
+  const batch=batchStatic(holder,{step:t=>{room.update(t);identity.update(t);props.update(t);}});
   const ry=slot.ry,cx=slot.center.x,cz=slot.center.z,swap=Math.abs(Math.sin(ry))>.5;
   const toWorld=(x,z)=>{const [a,b]=rot2(x,z,ry);return [cx+a,cz+b];};
   const cols=[];
@@ -502,13 +508,13 @@ void main(){
   regions.push(rr,dr);
   const lights=room.lightAnchors.map(a=>{const [x,z]=toWorld(a.x,a.z);return {pos:new T.Vector3(x,slot.y+a.y,z),color:a.color,intensity:a.intensity*.55,distance:a.distance,band:slot.band,room:slot.id,flicker:a.fire};});
   anchors.push(...lights);
-  slot.loaded={room,holder,identity,props,cols,regions:[rr,dr],lights,info,toWorld};
+  slot.loaded={room,holder,identity,props,cols,regions:[rr,dr],lights,info,toWorld,batch};
   api.onRoomLoaded?.(slot);
  }
  function unloadRoom(slot){
   const L=slot.loaded;if(!L)return;
   api.onRoomUnloaded?.(slot);
-  group.remove(L.holder);L.identity.dispose();L.props.dispose();L.room.dispose();
+  group.remove(L.holder);L.batch?.dispose();L.identity.dispose();L.props.dispose();L.room.dispose();
   for(const c of L.cols){const i=walls.indexOf(c);if(i>=0)walls.splice(i,1);}
   for(const r of L.regions){const i=regions.indexOf(r);if(i>=0)regions.splice(i,1);}
   for(const a of L.lights){const i=anchors.indexOf(a);if(i>=0)anchors.splice(i,1);}
@@ -517,7 +523,7 @@ void main(){
 
  function setHalo(a,v){const h=a.halo;if(!h)return;h.on[h.i]=v;h.g.attributes.on.needsUpdate=true;}
  // ---------------------------------------------------------------- light pool
- const POOL=8,pool=[];
+ const POOL=8,pool=[];let lightBudget=POOL;
  for(let i=0;i<POOL;i++){const l=new T.PointLight('#ffb45e',0,12,2);group.add(l);pool.push({light:l,anchor:null,w:0});}
  const ambient=new T.HemisphereLight('#d8cdb6','#4a3b2e',.95);group.add(ambient);
  let lightTimer=0;
@@ -602,9 +608,9 @@ void main(){
    lightTimer-=dt;
    if(lightTimer<=0){
     lightTimer=.25;const cam=camera.position;
-    const list=anchors.filter(a=>a.intensity>0&&Math.abs(a.pos.y-player.y)<9).map(a=>({a,d:a.pos.distanceToSquared(cam)})).sort((x,y)=>x.d-y.d).slice(0,POOL).map(x=>x.a);
+    const list=anchors.filter(a=>a.intensity>0&&Math.abs(a.pos.y-player.y)<9).map(a=>({a,d:a.pos.distanceToSquared(cam)})).sort((x,y)=>x.d-y.d).slice(0,lightBudget).map(x=>x.a);
     for(const slot of pool){if(slot.anchor&&!list.includes(slot.anchor))slot.anchor=null;}
-    for(const a of list){if(pool.some(s=>s.anchor===a))continue;const free=pool.find(s=>!s.anchor);if(free){free.anchor=a;free.w=0;}}
+    for(const a of list){if(pool.some(s=>s.anchor===a))continue;const free=pool.find(s=>!s.anchor&&s.light.visible);if(free){free.anchor=a;free.w=0;}}
    }
    for(const s of pool){
     const a=s.anchor,L=s.light;
@@ -616,6 +622,8 @@ void main(){
    }
   },
   unloadAll(){for(const s of slots)unloadRoom(s);},
+  // fewer real lights on lighter settings (a light costs on every pixel); changing it recompiles once
+  setLightBudget(n){lightBudget=Math.max(2,Math.min(POOL,n));pool.forEach((s,i)=>{s.light.visible=i<lightBudget;if(i>=lightBudget)s.anchor=null;});},
   setHouseLevels(levels){hourglasses.forEach((h,i)=>h.level=T.MathUtils.clamp(levels[i]??h.level,0,1));},
   dispose(){for(const s of slots)unloadRoom(s);for(const d of disposables)d.dispose?.();},
   onRoomLoaded:null,onRoomUnloaded:null,

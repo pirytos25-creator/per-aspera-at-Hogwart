@@ -90,3 +90,6 @@ export function scoreStroke(stroke, id, { minLength = 70 } = {}) {
   const score = Math.max(0, Math.min(1, 1 - (d - 0.03) / 0.26));
   return { score: tooShort ? Math.min(score, 0.2) : score, tooShort, reversed, d };
 }
+
+// the pace of a drawn stroke: it gathers speed and settles at the end (shared by the slate and the arm)
+export const traceEase = (u) => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);

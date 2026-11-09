@@ -11,7 +11,10 @@ export function createCameraRig(camera,graphics){
  const pos=V(),look=V(),tmp=V(),tmp2=V();
  const bars=document.createElement('div');bars.id='letterbox';bars.innerHTML='<i></i><i></i>';document.body.append(bars);
  // ---------------------------------------------------------------- conversation director
- const talk={active:false,npc:null,player:null,side:1,shot:'two',t:0,shotT:0,from:V(),to:V(),fov:38,drift:V(),focus:2,lines:0,blocked:null,shift:0,lift:0};
+ const talk={active:false,npc:null,player:null,side:1,shot:'two',t:0,shotT:0,from:V(),to:V(),to0:V(),fov:38,drift:V(),focus:2,lines:0,blocked:null,shift:0,lift:0,move:null,back:null,seed:0};
+ // every shot moves a little, like a camera on a slider or a slow crane: push in, arc around, never still
+ const MOVES={npc:{push:.07,arc:.035},player:{push:.06,arc:-.03},close:{push:.05,arc:.05},two:{push:.02,arc:.09},demo:{push:.1,arc:.07},practice:{push:.06,arc:-.05},react:{push:.05,arc:-.04}};
+ const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
  // eye level: the head bone sits at the base of the skull, the eyes ~13 cm above it
  function headOf(actor,out){if(!actor.head)return out.copy(actor.root.position).add(new T.Vector3(0,1.6,0));actor.head.getWorldPosition(out);return out.addScaledVector(UP,.12*actor.root.scale.y);}
  function pickSide(playerPos,npcPos){
@@ -25,14 +28,16 @@ export function createCameraRig(camera,graphics){
   const axis=V().copy(N).sub(P);axis.y=0;const d=Math.max(.8,axis.length());axis.normalize();
   const side=V().set(axis.z,0,-axis.x).multiplyScalar(talk.side);
   const from=V(),to=V();let fov=36,focus=1.5;
-  if(kind==='npc'){from.copy(P).addScaledVector(axis,-.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(N).addScaledVector(side,-.12).addScaledVector(UP,-.05);fov=34;}
-  else if(kind==='player'){from.copy(N).addScaledVector(axis,.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(P).addScaledVector(side,-.12).addScaledVector(UP,-.05);fov=34;}
+  if(kind==='npc'){from.copy(P).addScaledVector(axis,-.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(N).addScaledVector(side,-.14).addScaledVector(UP,-.11);fov=34;}
+  else if(kind==='player'){from.copy(N).addScaledVector(axis,.62).addScaledVector(side,.46).addScaledVector(UP,.06);to.copy(P).addScaledVector(side,-.14).addScaledVector(UP,-.11);fov=34;}
+  else if(kind==='react'){from.copy(P).addScaledVector(axis,1.05).addScaledVector(side,-.3).addScaledVector(UP,.03);to.copy(P).addScaledVector(UP,-.05);fov=27;}
   // lesson shots: a medium frame that shows the wand arm (demo = the teacher, practice = you)
-  else if(kind==='demo'){from.copy(P).addScaledVector(axis,-.1).addScaledVector(side,.95).addScaledVector(UP,-.05);to.copy(N).addScaledVector(UP,-.3);fov=36;}
-  else if(kind==='practice'){from.copy(N).addScaledVector(axis,.1).addScaledVector(side,.95).addScaledVector(UP,-.05);to.copy(P).addScaledVector(UP,-.3);fov=36;}
-  else if(kind==='close'){from.copy(N).addScaledVector(axis,-1.05).addScaledVector(side,.32).addScaledVector(UP,.02);to.copy(N).addScaledVector(UP,-.03);fov=27;}
+  else if(kind==='demo'){from.copy(P).addScaledVector(axis,.15).addScaledVector(side,.85).addScaledVector(UP,-.12);to.copy(N).addScaledVector(UP,-.22);fov=38;}
+  // practice: the mirror of the demo shot, from beside the teacher onto you and the shape you draw in the air
+  else if(kind==='practice'){from.copy(N).addScaledVector(axis,-.15).addScaledVector(side,.85).addScaledVector(UP,-.12);to.copy(P).addScaledVector(UP,-.22);fov=38;}
+  else if(kind==='close'){from.copy(N).addScaledVector(axis,-1.05).addScaledVector(side,.32).addScaledVector(UP,.02);to.copy(N).addScaledVector(UP,-.06);fov=27;}
   else{const mid=V().copy(P).lerp(N,.5);from.copy(mid).addScaledVector(side,Math.max(2.2,d*1.25)).addScaledVector(axis,-d*.18).addScaledVector(UP,.05);to.copy(mid).addScaledVector(UP,-.12);fov=40;}
-  focus=from.distanceTo(kind==='player'||kind==='practice'?P:kind==='two'?V().copy(P).lerp(N,.5):N);
+  focus=from.distanceTo(kind==='player'||kind==='react'||kind==='practice'?P:kind==='two'?V().copy(P).lerp(N,.5):N);
   aim(from,to);
   return {from,to,fov,focus};
  }
@@ -42,7 +47,7 @@ export function createCameraRig(camera,graphics){
   let f=framing(kind);
   // never put the lens inside a wall: try the other side, then pull in closer
   if(talk.blocked&&talk.blocked(f.to,f.from)){talk.side*=-1;f=framing(kind);if(talk.blocked(f.to,f.from)){talk.side*=-1;f=framing('close');}}
-  talk.shot=kind;talk.shotT=0;talk.from.copy(f.from);talk.to.copy(f.to);talk.fov=f.fov;talk.focus=f.focus;
+  talk.shot=kind;talk.shotT=0;talk.from.copy(f.from);talk.to.copy(f.to);talk.to0.copy(f.to);talk.fov=f.fov;talk.focus=f.focus;talk.move=MOVES[kind]||{push:.04,arc:.03};talk.seed=Math.random()*100;
   talk.drift.set((Math.random()-.5)*.05,(Math.random()-.5)*.02,(Math.random()-.5)*.05).add(V().copy(f.to).sub(f.from).normalize().multiplyScalar(.035));
   camera.position.copy(talk.from);camera.fov=talk.fov;camera.updateProjectionMatrix();camera.lookAt(talk.to);
  }
@@ -88,17 +93,29 @@ export function createCameraRig(camera,graphics){
    document.body.classList.add('cinematic');
    cut('two');
   },
-  npcLine(emphasis=false){if(!talk.active)return;talk.shift=talk.lift=0;talk.lines++;cut(emphasis?'close':talk.lines===1&&talk.shot==='two'?'npc':(talk.lines%3===0?'close':'npc'));},
+  npcLine(emphasis=false){if(!talk.active)return;talk.shift=talk.lift=0;talk.back=null;talk.lines++;cut(emphasis?'close':talk.lines===1&&talk.shot==='two'?'npc':(talk.lines%3===0?'close':'npc'));},
   shot(kind,{shift=0,lift=0}={}){if(!talk.active)return;talk.shift=shift;talk.lift=lift;cut(kind);},
-  playerLine(){if(!talk.active)return;talk.shift=talk.lift=0;cut('player');},
+  playerLine(){if(!talk.active)return;talk.shift=talk.lift=0;talk.back=null;cut('player');},
+  // a short cut to the listener's face in the middle of a long line, then back to the speaker
+  reaction(seconds=1.3){if(!talk.active||talk.shift||talk.lift)return;const back=talk.shot;cut('react');talk.back={kind:back,at:seconds};},
   endDialogue(){if(!talk.active)return;talk.active=false;talk.shift=talk.lift=0;talk.wasActive=true;document.body.classList.remove('cinematic');graphics?.setDOF(false);camera.fov=state.fov;camera.updateProjectionMatrix();},
   updateDialogue(dt){
    if(!talk.active)return;
    talk.shotT+=dt;
-   // slow push-in and drift keep the frame alive between cuts
-   camera.position.copy(talk.from).addScaledVector(talk.drift,Math.min(talk.shotT,6));
-   const k=talk.shot,target=k==='player'||k==='practice'?headOf(talk.player,V()):k==='two'?headOf(talk.player,V()).lerp(headOf(talk.npc,V()),.5):headOf(talk.npc,V());
-   target.addScaledVector(UP,k==='two'?-.12:k==='demo'||k==='practice'?-.3:-.04);aim(camera.position,target);
+   if(talk.back&&talk.shotT>=talk.back.at){const k=talk.back.kind;talk.back=null;cut(k);}
+   // the camera glides: a slow push-in and a small arc around the subject, eased, with a breath of handheld sway
+   const m=talk.move,e=ease(Math.min(1,talk.shotT/7));
+   const off=V().copy(talk.from).sub(talk.to0);
+   off.applyAxisAngle(UP,m.arc*talk.side*e).multiplyScalar(1-m.push*e);
+   const s=talk.seed,t=talk.shotT;
+   camera.position.copy(talk.to0).add(off).add(V(Math.sin(t*.9+s)*.006,Math.sin(t*1.3+s*2)*.004,Math.cos(t*.7+s)*.006));
+   const k=talk.shot;let target;
+   // lesson shots hold their composition; conversation shots keep the speaker's eyes on the upper third
+   if(k==='demo'||k==='practice')target=V().copy(talk.to0);
+   else{
+    target=k==='player'||k==='react'?headOf(talk.player,V()):k==='two'?headOf(talk.player,V()).lerp(headOf(talk.npc,V()),.5):headOf(talk.npc,V());
+    target.addScaledVector(UP,k==='two'?-.12:k==='close'||k==='react'?-.06:-.11);aim(camera.position,target);
+   }
    talk.to.lerp(target,1-Math.exp(-3*dt));
    camera.lookAt(talk.to);
    graphics?.setDOF(true,camera.position.distanceTo(talk.to),talk.shot==='close'?.009:.006,.009);

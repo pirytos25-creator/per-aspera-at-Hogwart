@@ -14,6 +14,7 @@ import { createCastle, CASTLE_ROOMS, FLOORS } from "./castle.js";
 import { createCastleLife } from "./castle-life.js";
 import { createLessons, PATTERNS, SPELL_PATTERN } from "./lessons.js";
 import { createCharacterShadows } from "./char-shadows.js";
+import { batchStatic } from "./batch.js";
 import { createEffects, createAudio } from "./effects.js";
 import {
   SAVE_KEY,
@@ -113,6 +114,7 @@ function updateCharShadows() {
     active: playing && player.root.visible,
     strength: inside ? 0.6 : timeMode === 1 ? 0.32 : 0.55,
     ground: outdoors ? (x, z) => Math.max(world.groundHeight(x, z), 1) : null,
+    every: quality === "ultra" ? 1 : 2,
   });
 }
 const world = createWorld();
@@ -184,7 +186,8 @@ function castleFloor(p, y = playerPos.y) {
 }
 let duelHit = () => {};
 const CELL_NAMES = { entrance: "Sala Wejściowa", exit: "Sala Wejściowa", tower: "Wielkie Schody", stairsD: "Schody do lochów", D: "Lochy", F1: "Pierwsze piętro", F2: "Drugie piętro", F3: "Trzecie piętro" };
-let life = null;
+let life = null,
+  roomBatch = null;
 function buildCastle() {
   const c = createCastle({ ROOMS, createInterior, createRoomIdentity, createRoomActivityProps });
   c.onRoomLoaded = (slot) => populateCastleRoom(slot);
@@ -293,7 +296,7 @@ function bark(actor, name, text) {
   barkTimer = setTimeout(() => barkEl.classList.remove("visible"), 1200 + seconds * 1000);
 }
 const ARENA = { center: new T.Vector3(23, 26.4, 20.6), axis: new T.Vector3(1, 0, 0), half: 7.5, width: 3.6 };
-const lessons = createLessons({ scene, audio });
+const lessons = createLessons({ scene, audio, camera });
 const duels = createDuels({
   scene,
   effects,
@@ -539,6 +542,8 @@ function clearZone() {
   disposeActivity();
   roomIdentity?.dispose();
   activityProps?.dispose();
+  roomBatch?.dispose();
+  roomBatch = null;
   roomIdentity = null;
   activityProps = null;
   effects.clear();
@@ -752,7 +757,10 @@ function switchZone(destination, arrive = null) {
   if (castle) castle.group.visible = destination === "castle";
   let spawn;
   if (destination === "castle") {
-    castle ??= buildCastle();
+    if (!castle) {
+      castle = buildCastle();
+      castle.setLightBudget(quality === "ultra" ? 8 : quality === "high" ? 6 : 4);
+    }
     if (!castle.group.parent) scene.add(castle.group);
     castle.group.visible = true;
     const door = arrive && arrive !== "entrance" ? castle.doorstep(arrive) : null;
@@ -788,6 +796,13 @@ function switchZone(destination, arrive = null) {
     activityProps.group.position.set(8.6, 0, 13.8);
     room.group.add(activityProps.group);
     room.colliders.push({ x: 8.6, z: 13.8, w: 1.65, d: 1.2, height: 1.1 });
+    roomBatch = batchStatic(room.group, {
+      step: (t) => {
+        room.update(t);
+        roomIdentity.update(t);
+        activityProps.update(t);
+      },
+    });
     spawn = [0, 0, 13.5];
     look.yaw = 0;
     look.distance = 3.9;
@@ -911,7 +926,13 @@ function releasePointer() {
   velocity.set(0, 0, 0);
 }
 let dialogueLine = null;
+let dialogueTimers = [];
+function dialogueLater(ms, fn) {
+  dialogueTimers.push(setTimeout(fn, ms));
+}
 function closeDialogue() {
+  for (const t of dialogueTimers) clearTimeout(t);
+  dialogueTimers = [];
   lessons.cancel();
   dialogueNpc?.actor?.stopSpeaking?.();
   dialogueNpc?.actor?.setExpression?.("neutral");
@@ -990,6 +1011,19 @@ function say(npc, role, text, choices) {
     player.setExpression?.(emotion === "happy" ? "happy" : emotion === "worried" ? "worried" : "neutral");
     const seconds = npc.actor.say?.(text) || text.length * 0.05;
     dialogueLine = { text, t: 0, dur: seconds, choices, shown: 0 };
+    // acting: a gesture that fits the line, and on long lines a cut to your reaction
+    for (const t of dialogueTimers) clearTimeout(t);
+    dialogueTimers = [];
+    const line = dialogueLine;
+    const gesture = /\?\s*$/.test(text) ? "shrug" : /!/.test(text) ? (emotion === "happy" ? "laugh" : "point") : emotion === "happy" || emotion === "kind" ? "nod" : emotion === "worried" ? "shrug" : emotion === "stern" ? "point" : null;
+    if (gesture) dialogueLater(Math.min(seconds * 450, 2200), () => dialogueNpc === npc && npc.actor.gesture?.(gesture));
+    if (seconds > 5) dialogueLater(seconds * 650, () => dialogueNpc === npc && npc.actor.gesture?.("nod"));
+    if (seconds > 4.2)
+      dialogueLater(seconds * 520, () => {
+        if (dialogueNpc !== npc || dialogueLine !== line) return;
+        player.setExpression?.(emotion === "worried" ? "worried" : emotion === "happy" ? "happy" : "thinking");
+        rig.reaction?.(1.35);
+      });
   } else {
     $("#dialogue-text").textContent = text;
     showChoices(choices);
@@ -1344,7 +1378,7 @@ function runLesson(n, role, opts) {
     player,
     ...opts,
     // medium shots that show the wand arm, aimed so the slate does not cover the person
-    shot: (who) => rig.shot(who === "teacher" ? "demo" : "practice", innerWidth > 680 ? { shift: 0.55 } : { lift: 0.5 }),
+    shot: (who) => rig.shot(who === "teacher" ? "demo" : "practice", innerWidth > 680 ? { shift: 0.7 } : { lift: 0.5 }),
     react: (ok, r) => {
       n.actor.setExpression?.(ok ? "happy" : "thinking");
       n.actor.gesture?.(ok ? "nod" : "shrug");
@@ -2102,6 +2136,7 @@ function setQuality(q, announce = false) {
   atmosphere.setQuality(q);
   sun.shadow.mapSize.setScalar(q === "ultra" ? 4096 : q === "high" ? 2048 : 1024);
   charShadows.setQuality(q);
+  castle?.setLightBudget(q === "ultra" ? 8 : q === "high" ? 6 : 4);
   sun.shadow.map?.dispose();
   sun.shadow.map = null;
   refreshShadows();
@@ -2474,6 +2509,12 @@ function frame(now) {
   frameSeconds += wallDt;
   if (frameSeconds >= 2) {
     const fps = Math.round(frames / frameSeconds);
+    // dynamic resolution keeps the effects and trades a little sharpness when frames get slow
+    if (running && !document.hidden) {
+      const r = graphics.resolutionScale;
+      if (fps < 40 && r > 0.6) graphics.setResolutionScale(r - 0.1);
+      else if (fps > 56 && r < 1) graphics.setResolutionScale(r + 0.05);
+    }
     $("#fps").textContent = fps + " FPS";
     if (running && !adapted && quality === "high" && fps < 29) slowSeconds += frameSeconds;
     else slowSeconds = 0;

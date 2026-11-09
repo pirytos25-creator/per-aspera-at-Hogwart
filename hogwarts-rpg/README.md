@@ -26,11 +26,13 @@ W zamku żyją uczniowie (chodzą, siadają na ławkach, czytają, rozmawiają w
 
 Profesor pokazuje ruch różdżki (prawdziwa animacja i świetlisty ślad), a ten sam ruch rysuje się na tabliczce. Potem gracz rysuje go myszą albo palcem. Rysunek jest próbkowany, normalizowany i porównywany punkt po punkcie ze wzorem (`gestures.js`), z podpowiedziami, gdy ruch jest za krótki albo idzie w przeciwną stronę. Trzy czyste próby podnoszą biegłość zaklęcia (do ★★★), a biegłość wzmacnia zaklęcie w grze: dłuższy Lumos i Protego, mocniejsze Expelliarmus, dłuższa lewitacja.
 
+Profesor naprawdę rysuje kształt różdżką w powietrzu (odwrotna kinematyka ramienia), a ślad świeci jak malowanie światłem, z iskrami. Kiedy rysujesz na tabliczce, Twoja postać rysuje ten sam ruch na żywo.
+
 Lumos i Leviosa: mistrz zaklęć. Protego i Expelliarmus: sala obrony, sala pojedynków i mistrz pojedynków na dziedzińcu. Pozostali profesorowie prowadzą lekcje swoich sal (pytanie i ruch różdżki). Postęp widać w dzienniku (J), w zakładce „Lekcje”.
 
 ## Rozmowy, walka i pojedynki
 
-Rozmowy prowadzi filmowa kamera: ujęcia zza ramienia, zbliżenia i plan dwóch postaci z zasadą 180°, głębia ostrości i kinowe pasy. W walce każde zaklęcie ma własny gest, trafienia odrzucają postać, mocny cios ją przewraca, a unik działa w cztery strony. Bartłomiej Wrzos, mistrz pojedynków na dziedzińcu, organizuje pojedynki z Adą, Tymonem i z nim samym.
+Rozmowy prowadzi filmowa kamera: ujęcia zza ramienia, zbliżenia i plan dwóch postaci z zasadą 180°, głębia ostrości i kinowe pasy. Każde ujęcie powoli najeżdża albo okrąża postać, oczy mówiącego trzymają się górnej trzeciej kadru, przy dłuższych kwestiach kamera na chwilę pokazuje reakcję słuchacza, a postacie gestykulują w rytm wypowiedzi. W walce każde zaklęcie ma własny gest, trafienia odrzucają postać, mocny cios ją przewraca, a unik działa w cztery strony. Bartłomiej Wrzos, mistrz pojedynków na dziedzińcu, organizuje pojedynki z Adą, Tymonem i z nim samym.
 
 ## Grywalny rozdział
 
@@ -53,6 +55,8 @@ WASD: ruch, Shift: bieg, Alt: unik, PPM i przeciągnięcie: kamera, scroll: odle
 Postęp jest zapisywany tylko w tej przeglądarce pod kluczem `hogwarts-rpg-v1`. Atlas ma inny klucz. Sale w zamku łączą się korytarzami; błonia, Hogsmeade i sale poza zamkiem nadal są osobnymi scenami. To fanowski prototyp pierwszego rozdziału, nie kompletna gra AAA ani wierny zamek 1:1. Inne sale mają scenografię, rozmowy i lekcje, ale nie odrębne rozdziały RPG. Animacje są kluczowane w Blenderze, bez motion capture. Świetlista wskazówka wskazuje kierunek; gracz sam omija przeszkody.
 
 ## Grafika i licencje
+
+Wydajność: nieruchome elementy sal i korytarzy są łączone w większe bryły (`batch.js`), liczba świateł zależy od trybu, cieniowanie zakamarków we wnętrzach działa na Ultra, a rozdzielczość sama się obniża, gdy klatek jest za mało. W zamku to około 2–3 razy mniej wywołań rysowania niż wcześniej.
 
 Tryby Płynność / Wysoka / Ultra; rozdzielczość dobierana do ekranu, postprocessing, bloom, odbicia jeziora, tekstury PBR 4K, cienie, mgła, pora dnia. W trybach Wysoka i Ultra obraz przechodzi końcową korekcję (chłodne cienie, ciepłe światła, winieta, drobne ziarno, na Ultra lekka aberracja na brzegach), a postacie mają obwódkę światła w kolorze miejsca. W zamku: smugi światła z okien, witraże, poświata pochodni, kurz w powietrzu i polerowana posadzka. Przy utrzymującej się niskiej liczbie klatek tryb Wysoka automatycznie przechodzi na Płynność. Ultra wybierany ręcznie nie jest automatycznie zmieniany.
 

@@ -85,7 +85,8 @@ export function createGraphics(renderer, scene, camera) {
     height = Math.max(1, dimensions.y);
   let quality = "ultra",
     interior = false,
-    disposed = false;
+    disposed = false,
+    resScale = 1;
   const hdr = renderer.extensions.has("EXT_color_buffer_float");
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -156,12 +157,13 @@ export function createGraphics(renderer, scene, camera) {
     height = Math.max(1, Math.floor(h));
     const preset = PRESETS[quality];
     const device = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
-    const pixelRatio = Math.min(device, preset.dpr, Math.sqrt(preset.pixels / (width * height)));
-    renderer.setPixelRatio(Math.max(0.65, pixelRatio));
+    const pixelRatio = Math.min(device, preset.dpr, Math.sqrt(preset.pixels / (width * height))) * resScale;
+    renderer.setPixelRatio(Math.max(0.55, pixelRatio));
     renderer.setSize(width, height);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(width, height);
-    contact.enabled = preset.ao && hdr;
+    // indoors the occlusion pass redraws hundreds of small objects: kept for Ultra only
+    contact.enabled = preset.ao && hdr && (!interior || quality === "ultra");
     grade.enabled = quality !== "balanced";
     grade.uniforms.aspect.value = width / height;
     grade.uniforms.aberration.value = quality === "ultra" ? 0.0016 : 0;
@@ -212,7 +214,18 @@ export function createGraphics(renderer, scene, camera) {
     },
     setInterior(value) {
       interior = Boolean(value);
+      contact.enabled = PRESETS[quality].ao && hdr && (!interior || quality === "ultra");
       refreshContact();
+    },
+    // dynamic resolution: the game lowers the render scale when frames get slow, and raises it back
+    setResolutionScale(s) {
+      s = Math.min(1, Math.max(0.6, s));
+      if (Math.abs(s - resScale) < 0.02) return;
+      resScale = s;
+      resize();
+    },
+    get resolutionScale() {
+      return resScale;
     },
     get quality() {
       return quality;

@@ -1,4 +1,5 @@
 import * as T from '../assets/three.module.js';
+import {traceEase} from './gestures.js';
 import {GLTFLoader} from '../assets/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from '../assets/addons/libs/meshopt_decoder.module.js';
 import {clone as cloneSkinned} from '../assets/addons/utils/SkeletonUtils.js';
@@ -121,7 +122,9 @@ export function createActor(options={}){
  let accent=null;
  const rigNode=model.getObjectByName('WizardRig')||model;
  const parts=rigNode.children.filter(c=>!c.isBone);
- const lod=[[],[]],wantHair=HAIR[style]||HAIR.short,headMeshes=[];
+ const lod=[[],[]],wantHair=HAIR[style]||HAIR.short,headMeshes=[],detail=[];
+ // small facial parts only matter up close: hidden on the far model and beyond a few metres
+ const DETAIL=new Set(['M_Teeth','M_Mouth','M_Lash','M_EyeGlint']);
  for(const o of parts){
   const base=o.name.replace(/_LOD1$/,''),isLod=o.name!==base;
   let show=true;
@@ -130,6 +133,8 @@ export function createActor(options={}){
   o.traverse(m=>{
    if(!m.isMesh)return;
    m.receiveShadow=true;m.castShadow=!isLod;m.layers.set(ACTOR_LAYER);
+   const mn=Array.isArray(m.material)?'':m.material?.name;
+   if(DETAIL.has(mn)){if(isLod)m.visible=false;else detail.push(m);}
    const swap=mt=>{
     if(mt.name==='M_Lining'){if(!accent){accent=upgrade(mt,null).clone();accent.color.set(color);}return accent;}
     const k=TINT[mt.name];return upgrade(mt,k?colours[k]:null);
@@ -161,6 +166,7 @@ export function createActor(options={}){
  const dur=n=>A[n]?A[n].getClip().duration:0;
 
  // ---------------------------------------------------------------- state
+ let detailOn=true;
  let phaseAcc=Math.random(),smoothedSpeed=0,smoothedSide=0,talkWeight=0,disposed=false,lodLevel=0,skipped=0,dist=0;
  const gestures=[];                         // additive one-shots {name,t,speed,hold,release,weight}
  const loops={guard:0,think:0,read:0},loopTarget={guard:0,think:0,read:0};
@@ -170,6 +176,9 @@ export function createActor(options={}){
  let jawExpr=0,exprHold=0,blinkT=1+Math.random()*3,blink=0,speech=null,jaw=0,mO=0,mW=0;
  let lookTarget=null,lookWeight=0,lookYaw=0,lookPitch=0,eyeYaw=0,eyePitch=0,lumosGlow=0;
  const saccade={x:0,y:0,t:0},savedNeck=new T.Quaternion(),savedHead=new T.Quaternion();let gazeApplied=false;
+ // ---------------------------------------------------------------- drawing a pattern in the air with the wand (two-bone arm IK)
+ const ARM={upper:bone('upper_armR'),fore:bone('forearmR'),hand:bone('handR'),tip:bone('wand_tip')};
+ const armSaved=[new T.Quaternion(),new T.Quaternion(),new T.Quaternion()];let armApplied=false,trace=null;
  function play(name,{fadeIn=.2,fadeOut=.2,speed=1,next=null,onEnd=null}={}){
   if(!A[name])return;
   if(over?.name==='getup')down=false;
@@ -207,6 +216,13 @@ export function createActor(options={}){
   lookAt(target,weight=1){lookTarget=target||null;lookWeight=target?weight:0;},
   setLumos(on){lumosGlow=on?1:0;},
   tipWorld(out=new T.Vector3()){return tip.getWorldPosition(out);},
+  // draw a pattern in the air: points in card space (x right, y down, 0..1) over `seconds`;
+  // mirror it when the character faces the viewer, so the shape reads the right way round
+  trace(points,seconds=1.6,{mirror=false,size=.56}={}){if(!ARM.upper||!points?.length)return 0;trace={path:points,dur:Math.max(.2,seconds),t:-.3,mirror,size,live:false,target:[points[0][0],points[0][1]],w:trace?.w||0,end:false};return seconds+.3;},
+  // follow a point that moves live (the player's own stroke on the slate)
+  traceLive(on,{mirror=false,size=.56}={}){if(!ARM.upper)return;if(on)trace={path:null,dur:1,t:0,mirror,size,live:true,target:trace?.target||[.5,.5],w:trace?.w||0,end:false};else if(trace)trace.end=true;},
+  setTraceTarget(x,y){if(trace?.live){trace.target[0]=x;trace.target[1]=y;}},
+  tracing:()=>!!trace&&!trace.end,
   update(dt,time,motion=0,talking=false){
    if(disposed)return;
    const speed=typeof motion==='number'?motion:motion.speed||0,side=typeof motion==='number'?0:motion.side||0,back=typeof motion==='object'&&!!motion.back;
@@ -219,6 +235,7 @@ export function createActor(options={}){
     if(every>1&&(Math.floor(time*60)%every)!==0)return;
     dt=skipped;skipped=0;
    }
+   const nearFace=dist<7.5;if(nearFace!==detailOn){detailOn=nearFace;for(const m of detail)m.visible=nearFace;}
    if(book)book.visible=lodLevel===0&&(seated==='sit_read'||loops.read>.05);
    if(bookLod)bookLod.visible=false;
    smoothedSpeed=damp(smoothedSpeed,speed,10,dt);smoothedSide=damp(smoothedSide,side,10,dt);
@@ -268,13 +285,63 @@ export function createActor(options={}){
    for(const n of ONE_SHOT_GESTURES)A[n]?.setEffectiveWeight(active[n]||0);
    // the mixer only writes changed values, so undo last frame's gaze offsets first
    if(gazeApplied){B.neck?.quaternion.copy(savedNeck);B.head?.quaternion.copy(savedHead);gazeApplied=false;}
+   if(armApplied){ARM.upper.quaternion.copy(armSaved[0]);ARM.fore.quaternion.copy(armSaved[1]);ARM.hand.quaternion.copy(armSaved[2]);armApplied=false;}
    mixer.update(dt);
    if(lodLevel===0&&dist<26)faceUpdate(dt,time);
+   if(trace)armTrace(dt);
    const casting=gestures.some(g=>g.name==='cast'||g.name.startsWith('spell'));
    tip.visible=casting||!!lumosGlow;tip.scale.setScalar(casting?.016+Math.sin(time*40)*.004:.014);
   },
   dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(model);accent?.dispose();tipMaterial.dispose();tipGeometry.dispose();root.traverse(o=>{if(o.isMesh&&o.material?.map===shadowTexture){o.geometry.dispose();o.material.dispose();}});}
  };
+ // ---------------------------------------------------------------- arm IK
+ const _S=new T.Vector3(),_E=new T.Vector3(),_Wr=new T.Vector3(),_Tg=new T.Vector3(),_fw=new T.Vector3(),_rt=new T.Vector3(),_UP=new T.Vector3(0,1,0),
+  _pole=new T.Vector3(),_dir=new T.Vector3(),_dW=new T.Vector3(),_tp=new T.Vector3(),_o=new T.Vector3(),_a1=new T.Vector3(),_a2=new T.Vector3(),
+  _wq=new T.Quaternion(),_pq=new T.Quaternion(),_dq=new T.Quaternion();
+ // turn a bone so that a point it carries (child) moves towards a target, blended by weight
+ function aimBone(boneObj,child,target,weight){
+  boneObj.getWorldPosition(_o);
+  _a1.copy(child).sub(_o).normalize();_a2.copy(target).sub(_o).normalize();
+  _dq.setFromUnitVectors(_a1,_a2);boneObj.getWorldQuaternion(_wq);_dq.multiply(_wq);
+  boneObj.parent.getWorldQuaternion(_pq);_pq.invert().multiply(_dq);
+  boneObj.quaternion.slerp(_pq,weight);boneObj.updateMatrixWorld(true);
+ }
+ function armTrace(dt){
+  const tr=trace;
+  tr.w=damp(tr.w,tr.end?0:1,tr.end?6:tr.live?14:8,dt);
+  if(tr.end&&tr.w<.01){trace=null;return;}
+  tr.t+=dt;
+  let x=tr.target[0],y=tr.target[1];
+  if(!tr.live){
+   const u=traceEase(clamp(tr.t/tr.dur,0,1)),n=tr.path.length-1,f=u*n,i=Math.min(n-1,Math.max(0,Math.floor(f))),k=f-i,a=tr.path[i],b=tr.path[Math.min(n,i+1)];
+   x=a[0]+(b[0]-a[0])*k;y=a[1]+(b[1]-a[1])*k;
+   if(tr.t>tr.dur+.35)tr.end=true;
+  }else{tr.sx=damp(tr.sx??x,x,22,dt);tr.sy=damp(tr.sy??y,y,22,dt);x=tr.sx;y=tr.sy;}
+  if(tr.mirror)x=1-x;
+  armSaved[0].copy(ARM.upper.quaternion);armSaved[1].copy(ARM.fore.quaternion);armSaved[2].copy(ARM.hand.quaternion);armApplied=true;
+  root.updateMatrixWorld(true);
+  const sc=root.scale.y;
+  // the drawing plane floats in front of the right shoulder and faces where the character faces
+  root.getWorldQuaternion(_wq);_fw.set(0,0,1).applyQuaternion(_wq).setY(0).normalize();_rt.crossVectors(_fw,_UP);
+  B.chest.getWorldPosition(_S);
+  _Tg.copy(_S).addScaledVector(_fw,.44*sc).addScaledVector(_UP,.3*sc).addScaledVector(_rt,.13*sc)
+   .addScaledVector(_rt,(x-.5)*tr.size*sc).addScaledVector(_UP,(.5-y)*tr.size*sc);
+  // the wand points forward and a little up; the wrist sits one wand length behind the tip
+  _dW.copy(_fw).multiplyScalar(.82).addScaledVector(_UP,.42).addScaledVector(_rt,.1).normalize();
+  ARM.hand.getWorldPosition(_Wr);ARM.tip.getWorldPosition(_tp);const L=_Wr.distanceTo(_tp);
+  const wrist=_Tg.clone().addScaledVector(_dW,-L);
+  ARM.upper.getWorldPosition(_S);ARM.fore.getWorldPosition(_E);
+  const a=_S.distanceTo(_E),b=_E.distanceTo(_Wr);
+  _dir.copy(wrist).sub(_S);const d=clamp(_dir.length(),Math.abs(a-b)+1e-3,(a+b)*.998);_dir.normalize();
+  // elbow hangs down, a little out and back
+  _pole.copy(_UP).multiplyScalar(-1).addScaledVector(_rt,.55).addScaledVector(_fw,-.3);
+  _pole.addScaledVector(_dir,-_pole.dot(_dir)).normalize();
+  const xx=(a*a-b*b+d*d)/(2*d),h=Math.sqrt(Math.max(0,a*a-xx*xx));
+  const elbow=_S.clone().addScaledVector(_dir,xx).addScaledVector(_pole,h),wristTarget=_S.clone().addScaledVector(_dir,d);
+  aimBone(ARM.upper,_E,elbow,tr.w);
+  ARM.hand.getWorldPosition(_Wr);aimBone(ARM.fore,_Wr,wristTarget,tr.w);
+  ARM.tip.getWorldPosition(_tp);aimBone(ARM.hand,_tp,_Tg,tr.w);
+ }
  // ---------------------------------------------------------------- face
  function rotateBoneModel(boneObj,rest,bindWorld,qModel){
   // apply a rotation expressed in model axes on top of the bone's (rest or animated) local rotation
