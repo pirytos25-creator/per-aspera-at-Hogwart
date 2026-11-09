@@ -8,6 +8,12 @@ W katalogu projektu: `npm start`, następnie http://127.0.0.1:4174/. Nie wymaga 
 
 `npm run check` sprawdza składnię. `npm test` sprawdza postęp zadań, zapisy, ekwipunek, talenty i kolizje.
 
+## Postacie i animacje
+
+Uczniowie i profesorowie to jeden model z Blendera (`dist/assets/models/wizard.glb`) ze szkieletem i animacjami: spoczynek z oddechem i mruganiem, chód, trucht, bieg, rozmowa z gestami, rzucanie zaklęcia i unik. Szata, kapelusz i włosy mają własny ruch. Kolory domu, fryzura (`style: 'short' | 'long' | 'bun'`), broda i kapelusz ustawia się w opcjach postaci w `game.js`.
+
+Podgląd całej obsady: `postacie.html` (Sala Prób). Skrypty do przebudowy modelu są w `tools/blender/`. Jeśli model się nie wczyta, gra użyje wcześniejszych, prostszych postaci (`actors-proc.js`).
+
 ## Grywalny rozdział
 
 Stwórz ucznia, porozmawiaj z McGonagall, naucz się lewitacji u Flitwicka, unieś trzy kamienie, pokonaj manekiny, spotkaj Hagrida, zapal trzy leśne runy Lumosem, uspokój strażnika i wróć po nagrodę. Zbieraj dittany i skrzynki, warz eliksiry u Snape'a, kupuj je w Hogsmeade, zdobywaj doświadczenie i rozwijaj trzy talenty. Dodatkowe wnętrza atlasu są dostępne do eksploracji i rozmów.

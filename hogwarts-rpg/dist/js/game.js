@@ -43,10 +43,10 @@ function rune(id,x,z){const done=state.runes.includes(id),pos=position(x,z,1.1);
 function clearZone(){disposeActivity();roomIdentity?.dispose();activityProps?.dispose();roomIdentity=null;activityProps=null;effects.clear();for(const a of actors){a.actor.dispose();a.actor.root.traverse(o=>{if(o.isSprite){o.material.map?.dispose();o.material.dispose();}});}for(const o of owned){o.geometry?.dispose();if(o.isSprite)o.material.map?.dispose();o.material?.dispose();}for(const e of entities.filter(e=>e.type==='enemy')){e.model.dispose?.();}scene.remove(zoneGroup);zoneGroup=new T.Group();scene.add(zoneGroup);entities=[];actors=[];owned=[];nearby=null;target=null;}
 function populate(){
  if(zone==='courtyard'){
-  npc('minerva','Minerva McGonagall',29,35,{color:'#baaa70',robe:'#25473d',hat:true,hair:'#88877b'});
-  npc('nora','Nora · Ravenclaw',14,37,{color:'#547da9',skin:'#a6795c'},[[14,37],[14,19],[31,19],[31,39]]);
-  npc('felix','Feliks · Hufflepuff',31,28,{color:'#c9a34f',hair:'#957044'},[[31,28],[31,39],[14,39],[14,20]]);
-  npc('ada','Ada · Gryffindor',20,39,{color:'#a64a43',skin:'#78523f'},[[20,39],[14,39],[14,19],[31,19],[31,39]]);
+  npc('minerva','Minerva McGonagall',29,35,{color:'#baaa70',robe:'#25473d',hat:true,hair:'#88877b',style:'bun',eyes:'#4f5f3a'});
+  npc('nora','Nora · Ravenclaw',14,37,{color:'#547da9',skin:'#a6795c',style:'long',hair:'#2a1d17'},[[14,37],[14,19],[31,19],[31,39]]);
+  npc('felix','Feliks · Hufflepuff',31,28,{color:'#c9a34f',hair:'#957044',style:'short',eyes:'#3f5a72'},[[31,28],[31,39],[14,39],[14,20]]);
+  npc('ada','Ada · Gryffindor',20,39,{color:'#a64a43',skin:'#78523f',style:'long',hair:'#1e1714'},[[20,39],[14,39],[14,19],[31,19],[31,39]]);
   door('charms-door','Sala zaklęć',12.1,31,()=>travel('charms'));
   door('hall-door','Wielka Sala',23,16.6,()=>travel('great-hall'));
   door('potions-door','Lochy eliksirów',33,32,()=>travel('potions'));
@@ -54,7 +54,7 @@ function populate(){
   for(const [i,x,z]of [[0,15,23],[1,23,20],[2,31,23]])enemy('dummy-'+i,'Manekin treningowy',x,z);
   pickup('courtyard-chest','chest',15,35);
  }else if(room){
-  const info=ROOMS.find(r=>r.id===roomId);if(info.professor){const teacher=roomId==='charms'?'flitwick':roomId==='potions'?'snape':roomId==='great-hall'?'dumbledore':'teacher';const opts=teacher==='flitwick'?{color:'#ac9a7b',scale:.85,beard:true,hair:'#c0b8aa'}:teacher==='snape'?{color:'#444b49',robe:'#182024',hair:'#171819'}:{color:info.color||'#b59a6a',hat:teacher==='dumbledore',beard:teacher==='dumbledore',hair:'#b6b3a7'};const tp=room.teacherPosition||[0,0,-10];npc(teacher,info.professor,tp[0],tp[2],opts);}
+  const info=ROOMS.find(r=>r.id===roomId);if(info.professor){const teacher=roomId==='charms'?'flitwick':roomId==='potions'?'snape':roomId==='great-hall'?'dumbledore':'teacher';const opts=teacher==='flitwick'?{color:'#ac9a7b',scale:.85,beard:true,hair:'#c0b8aa',style:'short'}:teacher==='snape'?{color:'#444b49',robe:'#182024',hair:'#171819',style:'long',skin:'#d2b39b'}:{color:info.color||'#b59a6a',hat:teacher==='dumbledore',beard:teacher==='dumbledore',hair:'#b6b3a7',style:teacher==='dumbledore'?'long':'short',eyes:teacher==='dumbledore'?'#4d6d8c':'#4b3a28'};const tp=room.teacherPosition||[0,0,-10];npc(teacher,info.professor,tp[0],tp[2],opts);}
   door('exit','Powrót na dziedziniec',0,15.7,()=>travel('courtyard'));
   door('school','Korytarze szkoły',11.5,13,showRooms);
   const station=door('practice',ACTIVITIES[roomId].title,8.6,15,showCurrentActivity);station.kind='ĆWICZENIE';
@@ -62,9 +62,9 @@ function populate(){
   if(roomId==='potions')door('brew','Uwarz eliksir zdrowia',-10,12,()=>{if(brew(state)){save();refreshHUD();toast('Eliksir gotowy. Odzyskuje 65 punktów zdrowia.');effects.sparks(playerPos,'#99d6a0');}else toast('Potrzebujesz 3 liści dittany. Znajdziesz je na błoniach.');});
   if(roomId==='library')pickup('library-chest','chest',-10,13);
  }else{
-  npc('hagrid','Rubeus Hagrid',-109,33,{color:'#a18460',robe:'#66503d',hair:'#493729',scale:1.45,beard:true});
-  npc('walker','Łucja · prefekt',-76,44,{color:'#548a73'},[[-76,44],[-105,40],[-108,5],[-124,-22],[-130,15]]);
-  npc('merchant','Rozalia · zielarka',238,-155,{color:'#ad8bba',robe:'#55485f'});
+  npc('hagrid','Rubeus Hagrid',-109,33,{color:'#a18460',robe:'#66503d',hair:'#493729',scale:1.45,beard:true,style:'long'});
+  npc('walker','Łucja · prefekt',-76,44,{color:'#548a73',style:'bun',hair:'#6b4630'},[[-76,44],[-105,40],[-108,5],[-124,-22],[-130,15]]);
+  npc('merchant','Rozalia · zielarka',238,-155,{color:'#ad8bba',robe:'#55485f',style:'bun',hair:'#a36b45',skin:'#e0b796'});
   door('castle-return','Brama Hogwartu',-53,48,()=>travel('courtyard'));
   for(let i=0;i<10;i++)pickup('herb-'+i,'herb',-73-i*8,37-Math.sin(i*.7)*15-i*3.7);
   pickup('forest-chest','chest',-150,-8);pickup('village-chest','chest',235,-153);

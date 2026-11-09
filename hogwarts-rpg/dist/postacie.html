@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hogwart · Szlaki Magii — Sala Prób postaci</title>
+<link rel="icon" href="./assets/crest.svg">
+<style>
+@font-face{font-family:Cormorant;src:url('./assets/cormorant.woff2') format('woff2');font-display:swap}
+:root{--ink:#f1efe6;--muted:#aab2b6;--gold:#c9b17c}
+*{box-sizing:border-box}html,body{margin:0;height:100%;overflow:hidden;background:#0c1117;color:var(--ink);font:400 15px/1.5 'Segoe UI',system-ui,sans-serif}
+canvas{display:block}
+header{position:fixed;top:22px;left:28px;pointer-events:none}
+header small{letter-spacing:.32em;text-transform:uppercase;color:var(--gold);font-size:11px}
+header h1{font:500 40px/1.05 Cormorant,Georgia,serif;margin:4px 0 6px}
+header p{color:var(--muted);max-width:430px;margin:0;font-size:14px}
+nav{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);display:flex;gap:6px;padding:6px;border:1px solid #c9b17c55;border-radius:6px;background:#0d141bd9;backdrop-filter:blur(6px)}
+nav button{min-height:40px;padding:0 14px;border:0;border-radius:4px;background:none;color:var(--muted);font:inherit;cursor:pointer;letter-spacing:.02em}
+nav button:hover{color:#fff;background:#ffffff0d}
+nav button[aria-pressed=true]{color:#15100a;background:var(--gold)}
+nav button:focus-visible{outline:2px solid #f4dba4;outline-offset:2px}
+.hint{position:fixed;right:28px;top:28px;color:var(--muted);font-size:12px;text-align:right}
+.hint kbd{display:inline-block;min-width:20px;padding:1px 5px;border:1px solid #b2b9bf55;border-radius:3px;background:#0d141b;color:#e9ebed;font:500 11px 'Segoe UI'}
+.tags{position:fixed;inset:0;pointer-events:none}
+.tags span{position:absolute;transform:translate(-50%,-100%);font:500 15px Cormorant,Georgia,serif;color:#ead4a0;text-shadow:0 1px 6px #000;white-space:nowrap}
+#loading{position:fixed;inset:0;display:grid;place-items:center;font:500 22px Cormorant,serif;color:var(--gold)}
+</style>
+<script type="importmap">{"imports":{"three":"./assets/three.module.js"}}</script>
+</head><body>
+<div id="loading">Przywoływanie obsady…</div>
+<header><small>Szlaki Magii · Sala Prób</small><h1>Obsada w ruchu</h1><p>Wspólny model czarodzieja z Blendera: jeden szkielet, trzy fryzury, broda i kapelusz, kolory domów. Wybierz ruch poniżej, przeciągnij myszą, by obejść scenę.</p></header>
+<div class="hint"><kbd>1</kbd>–<kbd>7</kbd> zmiana ruchu<br>przeciągnij · kółko · obrót</div>
+<div class="tags" id="tags"></div>
+<nav id="modes" aria-label="Ruch postaci"></nav>
+<script type="module">
+import * as T from './assets/three.module.js';
+import {OrbitControls} from './assets/addons/controls/OrbitControls.js';
+import {createActor} from './js/actors.js';
+
+const q=new URLSearchParams(location.search);
+const renderer=new T.WebGLRenderer({antialias:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(2,devicePixelRatio));renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;renderer.toneMapping=T.ACESFilmicToneMapping;renderer.toneMappingExposure=1.3;
+document.body.prepend(renderer.domElement);
+const scene=new T.Scene();scene.background=new T.Color('#121a22');scene.fog=new T.Fog('#121a22',14,32);
+const camera=new T.PerspectiveCamera(34,innerWidth/innerHeight,.1,80);camera.position.set(0,2.6,11.5);
+const controls=new OrbitControls(camera,renderer.domElement);controls.target.set(0,1.05,0);controls.enableDamping=true;controls.maxPolarAngle=1.52;controls.minDistance=2.5;controls.maxDistance=20;
+scene.add(new T.HemisphereLight('#c7dbe6','#3a3226',1.6));
+const key=new T.DirectionalLight('#ffd9a0',3.2);key.position.set(-5,9,7);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-9,right:9,top:6,bottom:-4});scene.add(key);
+const rim=new T.DirectionalLight('#8fb7da',1.6);rim.position.set(6,5,-8);scene.add(rim);
+// stone dais with an inlaid ring, lit like a duelling hall
+const floor=new T.Mesh(new T.CircleGeometry(16,64),new T.MeshStandardMaterial({color:'#3a352e',roughness:.9}));floor.rotation.x=-Math.PI/2;floor.position.y=-.12;floor.receiveShadow=true;scene.add(floor);
+const dais=new T.Mesh(new T.CylinderGeometry(7.4,7.7,.12,72),new T.MeshStandardMaterial({color:'#5d554a',roughness:.85}));dais.position.y=-.06;dais.receiveShadow=true;scene.add(dais);
+const ring=new T.Mesh(new T.TorusGeometry(6.9,.03,8,120),new T.MeshStandardMaterial({color:'#c9b17c',metalness:.8,roughness:.35,emissive:'#3a2c10'}));ring.rotation.x=Math.PI/2;ring.position.y=.012;scene.add(ring);
+for(let i=0;i<9;i++){const a=Math.PI*.5+i/8*Math.PI,l=new T.PointLight('#ffc87a',1.4,6,2);l.position.set(Math.sin(a)*8,1.7,Math.cos(a)*5.2-1.2);scene.add(l);const c=new T.Mesh(new T.SphereGeometry(.05,8,6),new T.MeshBasicMaterial({color:'#ffe2a4'}));c.position.copy(l.position);scene.add(c);}
+
+const CAST=[
+ ['McGonagall',{color:'#baaa70',robe:'#25473d',hat:true,hair:'#88877b',style:'bun',eyes:'#4f5f3a'}],
+ ['Snape',{color:'#444b49',robe:'#182024',hair:'#171819',style:'long',skin:'#d2b39b'}],
+ ['Ada',{color:'#a64a43',skin:'#78523f',style:'long',hair:'#1e1714'}],
+ ['Nora',{color:'#547da9',skin:'#a6795c',style:'long',hair:'#2a1d17'}],
+ ['Dumbledore',{color:'#b59a6a',hat:true,beard:true,hair:'#b6b3a7',style:'long',eyes:'#4d6d8c'}],
+ ['Feliks',{color:'#c9a34f',hair:'#957044',eyes:'#3f5a72'}],
+ ['Łucja',{color:'#548a73',style:'bun',hair:'#6b4630'}],
+ ['Flitwick',{color:'#ac9a7b',scale:.85,beard:true,hair:'#c0b8aa'}],
+ ['Hagrid',{color:'#a18460',robe:'#66503d',hair:'#493729',scale:1.45,beard:true,style:'long'}],
+];
+const tags=document.getElementById('tags');
+const actors=CAST.map(([name,o],i)=>{
+ const a=createActor(o),x=(i-(CAST.length-1)/2)*1.5,z=-Math.abs(x)*.3;
+ a.root.position.set(x,0,z);a.root.rotation.y=-x*.06;scene.add(a.root);
+ const tag=document.createElement('span');tag.textContent=name;tags.appendChild(tag);
+ return{a,tag,h:2.12*(o.scale||1)+(i%2?.32:0),offset:i*.37};
+});
+document.getElementById('loading').remove();
+
+const MODES=[['idle','Spoczynek'],['walk','Chód'],['jog','Trucht'],['run','Bieg'],['talk','Rozmowa'],['cast','Zaklęcie'],['dodge','Unik']];
+let mode=q.get('mode')||'walk';const nav=document.getElementById('modes');
+const buttons=MODES.map(([id,label],i)=>{const b=document.createElement('button');b.textContent=label;b.onclick=()=>setMode(id);nav.appendChild(b);return[id,b];});
+function setMode(m){mode=m;for(const[id,b]of buttons)b.setAttribute('aria-pressed',String(id===m));}
+setMode(mode);
+addEventListener('keydown',e=>{const n=+e.key;if(n>=1&&n<=MODES.length)setMode(MODES[n-1][0]);});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);});
+
+const SPEED={idle:0,walk:1.25,jog:3.7,run:7.5,talk:0,cast:0,dodge:0};
+let t=0;const v=new T.Vector3();
+function tick(dt){
+ t+=dt;
+ for(const x of actors){
+  const local=t+x.offset;
+  if(mode==='cast'&&Math.floor((local-dt)/1.6)!==Math.floor(local/1.6))x.a.cast();
+  if(mode==='dodge'&&Math.floor((local-dt)/1.5)!==Math.floor(local/1.5))x.a.dodge();
+  x.a.update(dt,t,SPEED[mode],mode==='talk');
+ }
+}
+function labels(){for(const x of actors){v.copy(x.a.root.position);v.y+=x.h;v.project(camera);x.tag.style.left=(v.x*.5+.5)*innerWidth+'px';x.tag.style.top=(-v.y*.5+.5)*innerHeight+'px';x.tag.style.opacity=v.z<1?1:0;}}
+const clock=new T.Clock();
+function frame(){tick(Math.min(.05,clock.getDelta()));controls.update();labels();renderer.render(scene,camera);if(!window.manual)requestAnimationFrame(frame);}
+// deterministic stepping for automated previews: window.manual=true; window.step(seconds)
+window.step=(s,fps=30)=>{for(let k=0;k<Math.round(s*fps);k++)tick(1/fps);controls.update();labels();renderer.render(scene,camera);};
+window.setMode=setMode;window.camera=camera;window.controls=controls;
+if(q.has('manual')){window.manual=true;step(0);}else requestAnimationFrame(frame);
+window.ready=true;
+</script></body></html>
