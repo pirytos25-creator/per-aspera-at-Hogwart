@@ -5,6 +5,7 @@ import { UnrealBloomPass } from "../assets/addons/postprocessing/UnrealBloomPass
 import { OutputPass } from "../assets/addons/postprocessing/OutputPass.js";
 import { SSAOPass } from "../assets/addons/postprocessing/SSAOPass.js";
 import { BokehPass } from "../assets/addons/postprocessing/BokehPass.js";
+import { ShaderPass } from "../assets/addons/postprocessing/ShaderPass.js";
 
 const PRESETS = {
   ultra: { dpr: 2, samples: 4, aoScale: 0.8, ao: true, pixels: 6500000 },
@@ -40,6 +41,44 @@ class ContactShadowsPass extends SSAOPass {
 }
 
 /** HDR lighting, contact shadows, restrained light bloom and final ACES output. */
+// Final film grade in display space: split toning (cool shadows, warm highlights), a gentle
+// S-curve, a lens vignette, chromatic fringing at the edges and fine animated grain.
+const GradeShader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    time: { value: 0 },
+    aspect: { value: 16 / 9 },
+    vignette: { value: 0.3 },
+    grain: { value: 0.028 },
+    aberration: { value: 0.0016 },
+    split: { value: 0.1 },
+    shadowTint: { value: new THREE.Color("#4f6f8f") },
+    highlightTint: { value: new THREE.Color("#ffd2a0") },
+    saturation: { value: 1.06 },
+    contrast: { value: 1.05 },
+    gamma: { value: 1 },
+  },
+  vertexShader: `varying vec2 vUv;
+void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader: `uniform sampler2D tDiffuse;uniform float time,aspect,vignette,grain,aberration,split,saturation,contrast,gamma;uniform vec3 shadowTint,highlightTint;varying vec2 vUv;
+float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
+void main(){
+ vec2 d=vUv-.5;float r2=dot(d*vec2(aspect,1.),d*vec2(aspect,1.));
+ vec2 off=d*aberration*r2*5.;
+ vec3 c=vec3(texture2D(tDiffuse,vUv+off).r,texture2D(tDiffuse,vUv).g,texture2D(tDiffuse,vUv-off).b);
+ c=pow(max(c,0.),vec3(gamma));
+ float l=dot(c,vec3(.2126,.7152,.0722));
+ c=mix(c,c*shadowTint*1.6,split*(1.-smoothstep(.05,.5,l)));
+ c=mix(c,c*highlightTint*1.18,split*smoothstep(.45,1.,l));
+ c=mix(vec3(l),c,saturation);
+ c=clamp((c-.5)*contrast+.5,0.,1.);
+ c*=1.-vignette*smoothstep(.12,.95,r2);
+ float g=hash(floor(vUv*vec2(1600.,900.))+fract(time*7.31)*91.)-.5;
+ c+=g*grain*(1.-l*.7);
+ gl_FragColor=vec4(c,1.);
+}`,
+};
+
 export function createGraphics(renderer, scene, camera) {
   const dimensions = renderer.getSize(new THREE.Vector2());
   let width = Math.max(1, dimensions.x),
@@ -80,6 +119,9 @@ export function createGraphics(renderer, scene, camera) {
   composer.addPass(dof);
   composer.addPass(bloom);
   composer.addPass(output);
+  const grade = new ShaderPass(GradeShader);
+  composer.addPass(grade);
+  let grainOn = true;
 
   function refreshContact() {
     const range = Math.max(1, camera.far - camera.near);
@@ -98,6 +140,14 @@ export function createGraphics(renderer, scene, camera) {
     bloom.strength = interior ? 0.24 : 0.28;
     bloom.radius = interior ? 0.42 : 0.55;
     bloom.threshold = hdr ? (interior ? 1.25 : 1.12) : 0.85;
+    // interiors: lift the midtones a little and warm the highlights (torchlight); outdoors: crisper air
+    const u = grade.uniforms;
+    u.gamma.value = interior ? 0.9 : 1;
+    u.split.value = interior ? 0.12 : 0.08;
+    u.highlightTint.value.set(interior ? "#ffc98f" : "#ffe0b8");
+    u.shadowTint.value.set(interior ? "#4d6680" : "#56769a");
+    u.saturation.value = interior ? 1.08 : 1.05;
+    u.contrast.value = interior ? 1.04 : 1.06;
   }
 
   function resize(w = width, h = height) {
@@ -112,6 +162,11 @@ export function createGraphics(renderer, scene, camera) {
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(width, height);
     contact.enabled = preset.ao && hdr;
+    grade.enabled = quality !== "balanced";
+    grade.uniforms.aspect.value = width / height;
+    grade.uniforms.aberration.value = quality === "ultra" ? 0.0016 : 0;
+    grade.uniforms.grain.value = grainOn ? (quality === "ultra" ? 0.028 : 0.02) : 0;
+    grade.uniforms.vignette.value = quality === "ultra" ? 0.32 : 0.26;
     contact.setSize(
       Math.max(1, Math.round(width * renderer.getPixelRatio() * preset.aoScale)),
       Math.max(1, Math.round(height * renderer.getPixelRatio() * preset.aoScale)),
@@ -139,6 +194,7 @@ export function createGraphics(renderer, scene, camera) {
       // Keeps AO correct if a caller changes lens settings for a photo.
       contact.ssaoMaterial.uniforms.cameraProjectionMatrix.value.copy(camera.projectionMatrix);
       contact.ssaoMaterial.uniforms.cameraInverseProjectionMatrix.value.copy(camera.projectionMatrixInverse);
+      grade.uniforms.time.value = (grade.uniforms.time.value + (dt || 0.016)) % 100;
       composer.render(dt);
     },
     resize,
@@ -148,6 +204,11 @@ export function createGraphics(renderer, scene, camera) {
       dof.uniforms.focus.value = focus;
       dof.uniforms.aperture.value = aperture;
       dof.uniforms.maxblur.value = maxblur;
+    },
+    // film grain is motion: off with the reduced-motion preference
+    setGrain(on) {
+      grainOn = !!on;
+      resize();
     },
     setInterior(value) {
       interior = Boolean(value);
@@ -169,6 +230,7 @@ export function createGraphics(renderer, scene, camera) {
       contact.noiseTexture?.dispose();
       bloom.dispose();
       output.dispose();
+      grade.dispose();
       composer.dispose();
     },
   };

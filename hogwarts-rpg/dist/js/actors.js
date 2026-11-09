@@ -64,6 +64,19 @@ function fabric(){
  clothTexture=new T.CanvasTexture(c);clothTexture.wrapS=clothTexture.wrapT=T.RepeatWrapping;clothTexture.repeat.set(26,26);return clothTexture;
 }
 // Physically based upgrades: fabric sheen on robes, a soft sheen on skin, glossy lips and eyes.
+// Fresnel rim light: a soft edge glow tinted by the place (torchlight indoors, sky outdoors) that
+// keeps characters readable against dark stone and gives them a filmic separation from the set.
+const RIM={color:{value:new T.Color('#ffd9b0')},strength:{value:.4},power:{value:2.7}};
+const RIM_MATERIALS=new Set(['M_Skin','M_Hair','M_Robe','M_Lining','M_Vest','M_Shirt','M_Trousers','M_Shoes']);
+export function setActorRim(color,strength){RIM.color.value.set(color);RIM.strength.value=strength;}
+function addRim(m){
+ m.onBeforeCompile=sh=>{
+  sh.uniforms.rimColor=RIM.color;sh.uniforms.rimStrength=RIM.strength;sh.uniforms.rimPower=RIM.power;
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform vec3 rimColor;uniform float rimStrength;uniform float rimPower;')
+   .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n{float rimF=1.0-clamp(dot(normal,normalize(vViewPosition)),0.0,1.0);totalEmissiveRadiance+=rimColor*rimStrength*pow(rimF,rimPower)*mix(vec3(.3),diffuseColor.rgb,.55);}');
+ };
+ m.customProgramCacheKey=()=>'actor-rim';
+}
 function upgrade(base,hex){
  const key=base.name+'|'+(hex||'')+'|'+base.vertexColors;
  if(shared.has(key))return shared.get(key);
@@ -77,6 +90,7 @@ function upgrade(base,hex){
  }else m=base.clone();
  if(hex)m.color.set(hex);
  if(base.name==='M_Robe'){m.bumpMap=fabric();m.bumpScale=.16;}
+ if(RIM_MATERIALS.has(base.name))addRim(m);
  shared.set(key,m);return m;
 }
 function blobShadow(){

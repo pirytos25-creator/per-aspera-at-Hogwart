@@ -7,7 +7,7 @@ import { createAtmosphere } from "./atmosphere.js";
 import { ROOMS } from "./data.js";
 import { ACTIVITIES, openRoomActivity, createRoomActivityProps } from "./room-activities.js";
 import { createRoomIdentity } from "./room-identity.js";
-import { createActor, createDummy, labelSprite, setActorCamera, setActorQuality, ACTOR_LAYER } from "./actors.js";
+import { createActor, createDummy, labelSprite, setActorCamera, setActorQuality, setActorRim, ACTOR_LAYER } from "./actors.js";
 import { createCameraRig } from "./camera-rig.js";
 import { createDuels, DUELISTS } from "./duel.js";
 import { createCastle, CASTLE_ROOMS, FLOORS } from "./castle.js";
@@ -731,6 +731,10 @@ function setLighting() {
   scene.background.set(inside ? "#152631" : timeMode === 1 ? "#101e32" : "#91aeae");
   hemi.intensity = inside ? 1.25 : timeMode === 1 ? 1.25 : 2.4;
   sun.intensity = inside ? 0.65 : timeMode === 1 ? 0.6 : 3.6;
+  // characters get a rim of the place's light: torches indoors, sky by day, moonlight at night
+  if (inside) setActorRim("#ffc488", 0.5);
+  else if (timeMode === 1) setActorRim("#9db8ea", 0.42);
+  else setActorRim("#e3efff", 0.3);
   fill.intensity = inside ? 0.6 : 1;
   renderer.toneMappingExposure = inside ? 1.25 : 1.22;
   refreshShadows();
@@ -2146,6 +2150,7 @@ function showMenu() {
   };
 }
 function applyPreferences() {
+  graphics.setGrain?.(!state.reducedMotion);
   document.body.classList.toggle("large-text", state.largeText);
   document.body.classList.toggle("high-contrast", state.highContrast);
   document.body.classList.toggle("reduced-motion", state.reducedMotion);

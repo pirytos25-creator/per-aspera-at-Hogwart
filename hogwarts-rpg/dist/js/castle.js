@@ -24,6 +24,23 @@ function tex(name,repeat=1,srgb=true){
  texCache.set(key,t);return t;
 }
 function canvasTex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.anisotropy=8;return t;}
+// leaded glass: diamond quarries in amber, ruby, cobalt, moss and clear panes
+function stainedGlass(){
+ const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');
+ const r=rng(4242),pal=['#e7b45a','#c2453b','#3b5fa8','#5f8f4a','#e9dfc4','#d98a3c','#7d5aa0','#cfe0e8'];
+ x.fillStyle='#14120f';x.fillRect(0,0,256,256);
+ const N=4,w=256/N;
+ for(let i=-1;i<=N;i++)for(let j=-1;j<=N*2;j++){
+  const cx=i*w+(j%2?w/2:0),cy=j*w/2;
+  const col=r()<.35?pal[7]:pal[Math.floor(r()*7)];
+  const g=x.createRadialGradient(cx-w*.12,cy-w*.12,2,cx,cy,w*.6);g.addColorStop(0,'#ffffff');g.addColorStop(.18,col);g.addColorStop(1,col);
+  x.fillStyle=g;x.globalAlpha=.88+r()*.12;x.beginPath();x.moveTo(cx,cy-w/2+3);x.lineTo(cx+w/2-3,cy);x.lineTo(cx,cy+w/2-3);x.lineTo(cx-w/2+3,cy);x.closePath();x.fill();
+ }
+ x.globalAlpha=1;
+ // seeds and streaks in the old glass
+ for(let k=0;k<900;k++){x.fillStyle=r()<.5?'#ffffff14':'#00000018';x.fillRect(r()*256,r()*256,1+r()*3,1);}
+ const t=new T.CanvasTexture(c);t.colorSpace=T.SRGBColorSpace;t.wrapS=t.wrapT=T.RepeatWrapping;t.anisotropy=8;return t;
+}
 function rng(seed){let n=seed>>>0;return()=>(n=(Math.imul(n,1664525)+1013904223)>>>0)/4294967296;}
 
 // box with world-scaled UVs, so textures keep their size on long walls
@@ -41,7 +58,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
  // ---------------------------------------------------------------- materials
  const M={
   wall:new T.MeshStandardMaterial({color:'#b8ab92',map:tex('stone',1),normalMap:tex('stone-normal',1,false),roughnessMap:tex('stone-rough',1,false),normalScale:new T.Vector2(.9,.9),roughness:.95}),
-  floor:new T.MeshStandardMaterial({color:'#8a8377',map:tex('stone',1),normalMap:tex('stone-normal',1,false),roughness:.86}),
+  floor:new T.MeshStandardMaterial({color:'#958d80',map:tex('stone',1),normalMap:tex('stone-normal',1,false),roughnessMap:tex('stone-rough',1,false),roughness:.68,normalScale:new T.Vector2(.7,.7)}),
   dark:new T.MeshStandardMaterial({color:'#4e5650',map:tex('stone',1),normalMap:tex('stone-normal',1,false),roughness:.95}),
   trim:new T.MeshStandardMaterial({color:'#d2c6ad',roughness:.8}),
   wood:new T.MeshStandardMaterial({color:'#7a5b40',map:tex('wood',1),roughness:.7}),
@@ -52,10 +69,11 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   flame:new T.MeshStandardMaterial({color:'#ffcf7a',emissive:'#ff9a2e',emissiveIntensity:3.2}),
   greenFlame:new T.MeshStandardMaterial({color:'#bff5c8',emissive:'#4bd27a',emissiveIntensity:2.6}),
   glass:new T.MeshStandardMaterial({color:'#9fc0c8',transparent:true,opacity:.22,roughness:.05,metalness:.1,depthWrite:false}),
-  window:new T.MeshStandardMaterial({color:'#9fb6c0',emissive:'#7f9fb8',emissiveIntensity:.9,roughness:.3}),
+  window:(()=>{const t=stainedGlass();return new T.MeshStandardMaterial({color:'#ffffff',map:t,emissive:'#ffffff',emissiveMap:t,emissiveIntensity:1.35,roughness:.25});})(),
   carpet:new T.MeshStandardMaterial({color:'#6e1f22',roughness:.95}),
  };
  for(const m of Object.values(M))disposables.push(m);
+ disposables.push(M.window.map);
  const houseCols=['#a5332f','#2f4f8f','#d1a23c','#2e7055'];
  const banners=houseCols.map(c=>new T.MeshStandardMaterial({color:c,roughness:.9,side:T.DoubleSide}));disposables.push(...banners);
 
@@ -96,12 +114,54 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   if(axis==='z')g.rotateY(Math.PI/2);
   g.translate(axis==='x'?at:fixed,y0,axis==='x'?fixed:at);add(band,M.trim,g);
  }
+ const halos={};   // band -> [{x,y,z,phase,green,anchor}]
  function torch(band,x,y,z,nx,nz,green=false){
   box(band,M.iron,x-nx*.12,y-.3,z-nz*.12,.08,.5,.08);
   const g=new T.ConeGeometry(.13,.35,8);g.translate(x+nx*.05,y,z+nz*.05);add(band,M.iron,g);
   const f=new T.Mesh(new T.ConeGeometry(.1,.42,7),green?M.greenFlame:M.flame);f.position.set(x+nx*.06,y+.33,z+nz*.06);bands[band].add(f);
   animated.push({kind:'flame',mesh:f,phase:random()*9});
-  anchors.push({pos:new T.Vector3(x+nx*.5,y+.5,z+nz*.5),color:green?'#7fe6a0':'#ffb45e',intensity:green?14:19,distance:15,band,flicker:true,flame:f,face:Math.atan2(nx,nz)});
+  const anchor={pos:new T.Vector3(x+nx*.5,y+.5,z+nz*.5),color:green?'#7fe6a0':'#ffb45e',intensity:green?14:19,distance:15,band,flicker:true,flame:f,face:Math.atan2(nx,nz)};
+  anchors.push(anchor);
+  (halos[band]??=[]).push({x:x+nx*.06,y:y+.36,z:z+nz*.06,phase:random()*9,green,anchor});
+ }
+ // ---------------------------------------------------------------- volumetric light shafts from the windows
+ const shaftGeo=new T.CylinderGeometry(1,1,1,20,1,true);disposables.push(shaftGeo);
+ const shaftMats=[];
+ // a soft patch of window light on the floor where a shaft lands
+ const poolMat=new T.ShaderMaterial({uniforms:{color:{value:new T.Color('#fff')},intensity:{value:.3}},
+  vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`uniform vec3 color;uniform float intensity;varying vec2 vUv;void main(){float r=length((vUv-.5)*2.);float a=pow(max(0.,1.-r),1.7)*intensity;gl_FragColor=vec4(color*a,1.);}`,
+  transparent:true,depthWrite:false,blending:T.AdditiveBlending,polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2});
+ disposables.push(poolMat);
+ function lightPool(band,x,y,z,rx,rz,color,intensity){
+  const m=poolMat.clone();m.uniforms.color.value=new T.Color(color);m.uniforms.intensity.value=intensity;disposables.push(m);
+  const g=new T.PlaneGeometry(rx*2,rz*2);g.rotateX(-Math.PI/2);disposables.push(g);
+  const mesh=new T.Mesh(g,m);mesh.position.set(x,y+.035,z);mesh.renderOrder=2;mesh.userData.skipAO=true;bands[band].add(mesh);
+ }
+ function shaft(band,from,to,r0,r1,color,intensity){
+  const m=new T.ShaderMaterial({uniforms:{color:{value:new T.Color(color)},intensity:{value:intensity},time:{value:0}},
+   vertexShader:`varying vec2 vUv;varying vec3 vN;varying vec3 vV;
+void main(){vUv=uv;vec4 mv=modelViewMatrix*vec4(position,1.);vV=-mv.xyz;vN=normalMatrix*normal;gl_Position=projectionMatrix*mv;}`,
+   fragmentShader:`uniform vec3 color;uniform float intensity;uniform float time;varying vec2 vUv;varying vec3 vN;varying vec3 vV;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n2(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+void main(){
+ float along=vUv.y;
+ float fall=smoothstep(0.,.35,along)*(1.-smoothstep(.9,1.,along))*(.35+.65*along);
+ float edge=pow(abs(dot(normalize(vN),normalize(vV))),1.25);
+ float n=n2(vec2(vUv.x*9.+time*.04,vUv.y*4.-time*.07))*.6+n2(vec2(vUv.x*23.-time*.03,vUv.y*9.))*.4;
+ float a=intensity*fall*edge*(.55+.45*n);
+ gl_FragColor=vec4(color*a,1.);
+}`,transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide});
+  shaftMats.push(m);disposables.push(m);
+  const mesh=new T.Mesh(shaftGeo,m);
+  const dir=new T.Vector3().subVectors(from,to),len=dir.length();
+  mesh.position.copy(from).add(to).multiplyScalar(.5);
+  mesh.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),dir.normalize());
+  // a cone: radius r0 at the window (top), r1 on the floor (bottom)
+  mesh.scale.set(1,len,1);mesh.userData.skipAO=true;mesh.renderOrder=3;
+  const g=new T.CylinderGeometry(r0,r1,1,20,1,true);mesh.geometry=g;disposables.push(g);
+  bands[band].add(mesh);
  }
  // ---------------------------------------------------------------- living portraits (original paintings)
  const paintTex=[];
@@ -193,6 +253,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
  const day=new T.Mesh(new T.PlaneGeometry(9,10),new T.MeshBasicMaterial({color:'#f3e2bd'}));day.position.set(0,G+5,45.2);day.rotation.y=Math.PI;bands.G.add(day);disposables.push(day.geometry,day.material);
  anchors.push({pos:new T.Vector3(0,G+4,42),color:'#f6e3bd',intensity:30,distance:22,band:'G'});
  portrait('G',-13.42,G+5.4,38,Math.PI/2);portrait('G',13.42,G+5.4,22,-Math.PI/2);
+ shaft('G',new T.Vector3(0,G+8,44.4),new T.Vector3(0,G+1.3,33),3.1,4.2,'#f6e2b8',.3);lightPool('G',0,G,33.5,4.6,6.5,'#f6dfb0',.32);
  armour('G',-11.8,G,41.5,Math.PI*.85);armour('G',11.8,G,41.5,-Math.PI*.85);
  bench('G',12.2,G,30,Math.PI/2);bench('G',-12.2,G,34,Math.PI/2);
 
@@ -227,7 +288,8 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
  }
  for(const [x,z,ry] of [[-13.4,-6,Math.PI/2],[-13.4,6,Math.PI/2],[13.4,-6,-Math.PI/2],[13.4,6,-Math.PI/2],[-6,-13.4,0],[6,-13.4,0]])portrait('T',x,G+5,z,ry,1.6,2.1);
  candles('T',0,FLOORS.F2,0,18,26,18,120);
- for(const [x,z,ry] of [[0,-13.45,0],[13.45,0,-Math.PI/2],[-13.45,0,Math.PI/2],[0,13.45,Math.PI]]){const w=new T.Mesh(new T.PlaneGeometry(3.2,9),M.window);w.position.set(x,TH-7,z);w.rotation.y=ry;bands.T.add(w);disposables.push(w.geometry);anchors.push({pos:new T.Vector3(x*.75,TH-8,z*.75),color:'#b9cde4',intensity:26,distance:26,band:'T'});}
+ for(const [x,z] of [[0,-13.45],[13.45,0],[-13.45,0],[0,13.45]])shaft('T',new T.Vector3(x*.97,TH-7,z*.97),new T.Vector3(x*.12,FLOORS.F2-1,z*.12),1.5,3.4,'#c8dbf2',.17);
+ for(const [x,z,ry] of [[0,-13.45,0],[13.45,0,-Math.PI/2],[-13.45,0,Math.PI/2],[0,13.45,Math.PI]]){const wg=new T.PlaneGeometry(3.2,9);{const uv=wg.attributes.uv;for(let i=0;i<uv.count;i++)uv.setY(i,uv.getY(i)*9/3.2);}const w=new T.Mesh(wg,M.window);w.position.set(x,TH-7,z);w.rotation.y=ry;bands.T.add(w);disposables.push(w.geometry);anchors.push({pos:new T.Vector3(x*.75,TH-8,z*.75),color:'#b9cde4',intensity:26,distance:26,band:'T'});}
  for(const [x,z,nx,nz] of [[-13.35,-9,1,0],[13.35,-9,-1,0],[-9,-13.35,0,1],[9,-13.35,0,1]])torch('T',x,G+3.2,z,nx,nz);
  // stairs: a ramp of steps from (a) to (b); returns its mesh group
  function flight(parent,ax,az,ay,bx,bz,by,w=3.2){
@@ -236,7 +298,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   const step=new T.BoxGeometry(w,.22,len/n+.02),stringer=new T.BoxGeometry(.25,.5,len/n+.04);disposables.push(step,stringer);
   for(let i=0;i<n;i++){const t=(i+.5)/n;const m=new T.Mesh(step,M.floor);m.position.set(ax+dx*t,ay+(by-ay)*((i+1)/n)-.11,az+dz*t);m.rotation.y=yaw;g.add(m);
    for(const s of [-1,1]){const r=new T.Mesh(stringer,M.trim);r.position.copy(m.position).add(new T.Vector3(Math.cos(yaw)*s*(w/2),.35,-Math.sin(yaw)*s*(w/2)));r.rotation.y=yaw;g.add(r);}}
-  const under=new T.Mesh(new T.BoxGeometry(w,.3,Math.hypot(len,by-ay)),M.dark);under.position.set((ax+bx)/2,(ay+by)/2-.35,(az+bz)/2);under.rotation.order='YXZ';under.rotation.y=yaw;under.rotation.x=Math.atan2(by-ay,len);g.add(under);disposables.push(under.geometry);
+  const under=new T.Mesh(new T.BoxGeometry(w,.3,Math.hypot(len,by-ay)),M.wall);under.position.set((ax+bx)/2,(ay+by)/2-.35,(az+bz)/2);under.rotation.order='YXZ';under.rotation.y=yaw;under.rotation.x=Math.atan2(by-ay,len);g.add(under);disposables.push(under.geometry);
   return g;
  }
  const ramp=(o)=>region({band:'T',cell:'tower',surface:'stone',...o});
@@ -298,7 +360,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   // end wall with a tall window (and the tower stairs on the third floor)
   const endA=C.sign>0?hi:lo;const [ex,ez]=P(endA+C.sign*.5,C.center);
   box(band,C.id==='D'?M.dark:M.wall,ex,y+H/2,ez,C.axis==='x'?1:C.width+2,H,C.axis==='x'?C.width+2:1,{collide:true});
-  if(C.id!=='D'){const [wx,wz]=P(endA,C.center);box(band,M.window,wx,y+H*.55,wz,C.axis==='x'?.12:2.2,H*.7,C.axis==='x'?2.2:.12);anchors.push({pos:new T.Vector3(wx,y+4,wz).add(new T.Vector3(C.axis==='x'?-C.sign*2:0,0,C.axis==='z'?-C.sign*2:0)),color:'#b8cde0',intensity:14,distance:16,band});}
+  if(C.id!=='D'){const [wx,wz]=P(endA,C.center);const [sx,sz]=P(endA-C.sign*9,C.center);shaft(band,new T.Vector3(wx,y+H*.55,wz),new T.Vector3(sx,y+1.1,sz),1,2.1,'#d6c7f0',.24);{const [px,pz]=P(endA-C.sign*9.6,C.center);lightPool(band,px,y,pz,C.axis==='x'?3.4:2.6,C.axis==='x'?2.6:3.4,'#e8d6ff',.22);}box(band,M.window,wx,y+H*.55,wz,C.axis==='x'?.12:2.2,H*.7,C.axis==='x'?2.2:.12);anchors.push({pos:new T.Vector3(wx,y+4,wz).add(new T.Vector3(C.axis==='x'?-C.sign*2:0,0,C.axis==='z'?-C.sign*2:0)),color:'#b8cde0',intensity:14,distance:16,band});}
   // walkable floor
   const [rx0,rz0]=P(lo,C.center-hw+.3),[rx1,rz1]=P(hi,C.center+hw-.3);
   region({band,cell:C.id,x0:Math.min(rx0,rx1),x1:Math.max(rx0,rx1),z0:Math.min(rz0,rz1),z1:Math.max(rz0,rz1),y,surface:'stone'});
@@ -350,6 +412,35 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   for(const g of geos)g.dispose();
   const mesh=new T.Mesh(merged,mat);mesh.receiveShadow=true;mesh.castShadow=mat!==M.carpet;bands[band].add(mesh);disposables.push(merged);
  }
+
+ // ---------------------------------------------------------------- torch halos (one draw call per floor)
+ const haloMats=[];
+ for(const [band,list] of Object.entries(halos)){
+  const g=new T.BufferGeometry(),pos=new Float32Array(list.length*3),ph=new Float32Array(list.length),col=new Float32Array(list.length*3),on=new Float32Array(list.length).fill(1);
+  list.forEach((h,i)=>{pos.set([h.x,h.y,h.z],i*3);ph[i]=h.phase;col.set(h.green?[.45,1,.6]:[1,.62,.28],i*3);h.anchor.halo={i,on,g};});
+  g.setAttribute('position',new T.BufferAttribute(pos,3));g.setAttribute('phase',new T.BufferAttribute(ph,1));g.setAttribute('color',new T.BufferAttribute(col,3));g.setAttribute('on',new T.BufferAttribute(on,1));
+  const m=new T.ShaderMaterial({uniforms:{time:{value:0},scale:{value:400}},
+   vertexShader:`attribute float phase;attribute float on;attribute vec3 color;varying vec3 vC;uniform float time;uniform float scale;
+void main(){vec4 mv=modelViewMatrix*vec4(position,1.);float f=.86+.1*sin(time*11.+phase)+.05*sin(time*23.+phase*2.);vC=color*on*f;gl_PointSize=scale*.62*f/max(.5,-mv.z);gl_Position=projectionMatrix*mv;}`,
+   fragmentShader:`varying vec3 vC;void main(){float r=length(gl_PointCoord-.5)*2.;float a=pow(max(0.,1.-r),2.4);if(a*max(vC.r,vC.g)<.01)discard;gl_FragColor=vec4(vC*a*.85,1.);}`,
+   transparent:true,depthWrite:false,blending:T.AdditiveBlending});
+  const pts=new T.Points(g,m);pts.frustumCulled=false;pts.renderOrder=4;pts.userData.skipAO=true;bands[band].add(pts);haloMats.push(m);disposables.push(g,m);
+ }
+ // ---------------------------------------------------------------- dust in the air around you (wraps around the player in the shader)
+ const DUST=900,dustGeo=new T.BufferGeometry(),dustSeed=new Float32Array(DUST*4);
+ for(let i=0;i<DUST*4;i++)dustSeed[i]=random();
+ dustGeo.setAttribute('position',new T.BufferAttribute(new Float32Array(DUST*3),3));dustGeo.setAttribute('seed',new T.BufferAttribute(dustSeed,4));
+ const dustMat=new T.ShaderMaterial({uniforms:{time:{value:0},center:{value:new T.Vector3()},box:{value:new T.Vector3(18,7,18)},scale:{value:400},strength:{value:.8}},
+  vertexShader:`attribute vec4 seed;uniform float time;uniform vec3 center;uniform vec3 box;uniform float scale;varying float vA;
+void main(){
+ vec3 drift=vec3(sin(time*.11+seed.w*6.)*.6,-.05-seed.w*.06,cos(time*.09+seed.x*6.)*.6)*time;
+ vec3 p=mod(seed.xyz*box+drift-center+box*.5,box)-box*.5+center;
+ p+=vec3(sin(time*.7+seed.y*20.),sin(time*.5+seed.z*20.),cos(time*.6+seed.x*20.))*.06;
+ vec3 q=(p-center)/(box*.5);vA=(1.-smoothstep(.6,1.,max(abs(q.x),max(abs(q.y),abs(q.z)))))*(.35+.65*seed.w);
+ vec4 mv=modelViewMatrix*vec4(p,1.);gl_PointSize=scale*.034*(.6+seed.y)/max(.3,-mv.z);gl_Position=projectionMatrix*mv;}`,
+  fragmentShader:`uniform float strength;varying float vA;void main(){float r=length(gl_PointCoord-.5)*2.;float a=pow(max(0.,1.-r),1.6)*vA*strength;if(a<.004)discard;gl_FragColor=vec4(vec3(1.,.93,.82)*a,1.);}`,
+  transparent:true,depthWrite:false,blending:T.AdditiveBlending});
+ const dust=new T.Points(dustGeo,dustMat);dust.frustumCulled=false;dust.renderOrder=5;dust.userData.skipAO=true;group.add(dust);disposables.push(dustGeo,dustMat);
 
  // ================================================================ queries
  const _p=new T.Vector3();
@@ -424,6 +515,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
   slot.loaded=null;
  }
 
+ function setHalo(a,v){const h=a.halo;if(!h)return;h.on[h.i]=v;h.g.attributes.on.needsUpdate=true;}
  // ---------------------------------------------------------------- light pool
  const POOL=8,pool=[];
  for(let i=0;i<POOL;i++){const l=new T.PointLight('#ffb45e',0,12,2);group.add(l);pool.push({light:l,anchor:null,w:0});}
@@ -433,7 +525,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
  const api={
   group,slots,regions,walls,platforms,anchors,seats,hourglasses,towerDoor,pages:PAGES,passage,
   // a prankster can blow out a torch for a while
-  douse(p,time){let best=null,bd=7;for(const a of anchors){if(!a.flame)continue;const d=a.pos.distanceTo(p);if(d<bd){bd=d;best=a;}}if(best){best.dousedUntil=time+7;best.flame.visible=false;}return best;},
+  douse(p,time){let best=null,bd=7;for(const a of anchors){if(!a.flame)continue;const d=a.pos.distanceTo(p);if(d<bd){bd=d;best=a;}}if(best){best.dousedUntil=time+7;best.flame.visible=false;setHalo(best,0);}return best;},
   spawn:{entrance:new T.Vector3(0,G,41.5),tower:new T.Vector3(0,G,10)},
   floorAt(x,z,y=0){const c=regionAt(x,z,y,1.3);return c?c.h:y;},
   regionAt,
@@ -501,6 +593,10 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
      a.inst.instanceMatrix.needsUpdate=true;a.fl.instanceMatrix.needsUpdate=true;
     }
    }
+   const pxScale=(typeof innerHeight==='number'?innerHeight:720)*.5*(typeof devicePixelRatio==='number'?Math.min(2,devicePixelRatio):1);
+   for(const m of shaftMats)m.uniforms.time.value=time;
+   for(const m of haloMats){m.uniforms.time.value=time;m.uniforms.scale.value=pxScale;}
+   dustMat.uniforms.time.value=time;dustMat.uniforms.center.value.set(player.x,player.y+2.2,player.z);dustMat.uniforms.scale.value=pxScale;
    for(const h of hourglasses){const k=.5+.5*Math.sin(time*.05+h.level*9);h.lower.scale.y=.25+h.level*1.6;h.lower.position.y=.55+h.lower.scale.y/2;h.upper.scale.y=Math.max(.05,1-h.level)*.9;h.upper.position.y=3.8-h.upper.scale.y/2;}
    // nearest light anchors get the real lights (fixed count, no shader recompiles)
    lightTimer-=dt;
@@ -515,7 +611,7 @@ export function createCastle({ROOMS,createInterior,createRoomIdentity,createRoom
     s.w=Math.min(1,s.w+dt*2);
     if(!a){L.intensity=Math.max(0,L.intensity-dt*30);continue;}
     L.position.copy(a.pos);L.color.set(a.color);L.distance=a.distance;
-    if(a.dousedUntil&&time>a.dousedUntil){a.dousedUntil=0;a.flame.visible=true;}
+    if(a.dousedUntil&&time>a.dousedUntil){a.dousedUntil=0;a.flame.visible=true;setHalo(a,1);}
     L.intensity=a.dousedUntil?0:a.intensity*s.w*(a.flicker?(.88+.12*Math.sin(time*11+a.pos.x)+.05*Math.sin(time*23)):1);
    }
   },
