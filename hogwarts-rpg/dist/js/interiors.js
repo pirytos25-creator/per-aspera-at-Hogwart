@@ -669,6 +669,8 @@ export function createInterior(room) {
     label("HOGWART", room.name || "Szkoła Magii i Czarodziejstwa", 0, 7.4, 17.35, 5, Math.PI);
   }
 
+  // rooms with raised floors (a walkable flight of stairs) report their height here
+  let floorAt = null;
   // Each room has a distinct arrangement and silhouette.
   if (type === "hall") {
     // four house tables with real aisles between them (the benches sit clear of the next table)
@@ -980,13 +982,35 @@ export function createInterior(room) {
         ball(pale, side * 13.12, 5.3, z, 0.43, 0.12, 1.3, 1);
       }
     if (/stair|schod/i.test(id)) {
-      // a solid flight (steps reach the floor), railed on both sides, and you cannot walk through it
+      // A real flight: you climb it to a landing with a door into the castle's staircase tower.
       for (let k = 0; k < 18; k++) box(stone, -7, (k * 0.25 + 0.25) / 2, 9 - k * 0.85, 5, k * 0.25 + 0.25, 0.95);
+      box(stone, -8.75, 4.25, -8.3, 8.7, 0.5, 4.9);
+      for (const [cx, cz] of [[-5.1, -10.2], [-12.4, -10.2], [-12.4, -6.4]]) cyl(stone, cx, 2, cz, 0.32, 4);
       for (const rx of [-9.4, -4.6]) {
         for (let k = 0; k < 18; k += 2) cyl(gold, rx, k * 0.25 + 0.25 + 0.55, 9 - k * 0.85, 0.04, 1.1);
         beam([rx, 1.35, 9], [rx, 5.6, -5.45], 0.08, gold);
       }
-      colliders.push({ x: -7, z: 1.78, w: 5.3, d: 15.6, height: 4.8 });
+      // landing rails: east edge, north edge and the short edge beside the top step
+      const rails = [[[-4.6, -5.45], [-4.6, -10.55]], [[-4.6, -10.55], [-13.2, -10.55]], [[-9.4, -5.85], [-13.2, -5.85]]];
+      for (const [[ax, az], [bx, bz]] of rails) {
+        beam([ax, 5.6, az], [bx, 5.6, bz], 0.08, gold);
+        const n = Math.max(2, Math.round(Math.hypot(bx - ax, bz - az) / 1.3));
+        for (let i = 0; i <= n; i++) cyl(gold, ax + ((bx - ax) * i) / n, 5.05, az + ((bz - az) * i) / n, 0.04, 1.1);
+      }
+      // the door in the west wall
+      box(darkWood, -13.42, 6.1, -8.3, 0.12, 3.2, 2.0);
+      box(gold, -13.4, 7.78, -8.3, 0.16, 0.16, 2.4);
+      for (const dz of [-1.12, 1.12]) box(gold, -13.4, 6.1, -8.3 + dz, 0.16, 3.3, 0.16);
+      ball(gold, -13.3, 6.0, -7.55, 0.07);
+      label("WIEŻA SCHODÓW", "przejście do zamku", -13.3, 8.7, -8.3, 3.2, Math.PI / 2);
+      // thin walls keep you on the flight: the only way up is from the bottom step
+      colliders.push({ x: -9.6, z: 1.78, w: 0.2, d: 15.35, height: 6 }, { x: -4.4, z: -0.58, w: 0.2, d: 20.05, height: 6 });
+      colliders.push({ x: -8.7, z: -10.7, w: 8.8, d: 0.2, height: 6 }, { x: -11.3, z: -5.8, w: 3.4, d: 0.2, height: 6 });
+      floorAt = (x, z) => {
+        if (x >= -4.4 || z > 9.45 || z < -10.7) return 0;
+        if (z < -5.9) return 4.5;
+        return x > -9.6 ? Math.min(4.5, Math.max(0, (9.45 - z) / 0.85) * 0.25) : 0;
+      };
     } else {
       for (let x of [-8, 8])
         for (let z of [-10, 2, 10]) {
@@ -1172,6 +1196,7 @@ export function createInterior(room) {
     bounds: { minX: -12.6, maxX: 12.6, minZ: -16.3, maxZ: 16.3 },
     teacherPosition,
     colliders,
+    floorAt,
     lightAnchors,
     type,
     update(time) {

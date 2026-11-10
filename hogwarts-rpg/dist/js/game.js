@@ -406,7 +406,7 @@ const V = (x = 0, y = 0, z = 0) => new T.Vector3(x, y, z),
   damp = (a, b, rate, dt) => T.MathUtils.lerp(a, b, 1 - Math.exp(-rate * dt));
 let placeY = null; // floor level for things being placed in a castle room
 function height(x, z) {
-  return zone === "courtyard" ? 26.4 : room ? 0 : zone === "castle" ? (placeY ?? castle.floorAt(x, z, playerPos.y)) : Math.max(world.groundHeight(x, z), 1);
+  return zone === "courtyard" ? 26.4 : room ? (room.floorAt ? room.floorAt(x, z) : 0) : zone === "castle" ? (placeY ?? castle.floorAt(x, z, playerPos.y)) : Math.max(world.groundHeight(x, z), 1);
 }
 function position(x, z, y = 0) {
   return V(x, height(x, z) + y, z);
@@ -679,6 +679,8 @@ function populate() {
       npc(teacher, info.professor, tp[0], tp[2], opts);
     }
     door("exit", "Powrót na dziedziniec", 0, 15.7, () => travel("courtyard"));
+    // the flight in the staircase hall leads to a door into the castle's staircase tower
+    if (roomId === "stairs") door("castle-stairs", "Wielkie Schody zamku", -12, -8.3, () => travel("castle", "tower"));
     door("school", "Korytarze szkoły", 11.5, 13, showRooms);
     const station = door("practice", ACTIVITIES[roomId].title, 8.6, 15, showCurrentActivity);
     station.kind = "ĆWICZENIE";
@@ -768,8 +770,9 @@ function switchZone(destination, arrive = null) {
     }
     if (!castle.group.parent) scene.add(castle.group);
     castle.group.visible = true;
-    const door = arrive && arrive !== "entrance" ? castle.doorstep(arrive) : null;
-    const p = door ? door.pos : castle.spawn.entrance;
+    const door = arrive && arrive !== "entrance" && arrive !== "tower" ? castle.doorstep(arrive) : null;
+    // "tower": you step out onto the first-floor gallery of the staircase tower
+    const p = arrive === "tower" ? V(-12.2, FLOORS.F1, 5.5) : door ? door.pos : castle.spawn.entrance;
     spawn = [p.x, p.y, p.z];
     look.yaw = door ? door.yaw + Math.PI : 0;
     look.distance = 3.8;
