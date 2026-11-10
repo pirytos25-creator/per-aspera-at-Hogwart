@@ -1001,6 +1001,8 @@ function say(npc, role, text, choices) {
   releasePointer();
   const first = !dialogueNpc;
   dialogueNpc = npc;
+  // the follow camera hides the character when it is pressed right against them; a conversation always shows both
+  player.root.visible = true;
   $("#dialogue").hidden = false;
   document.body.classList.add("talking");
   $("#speaker").textContent = npc.name;
@@ -2564,7 +2566,7 @@ function frame(now) {
   }
 }
 // test and debugging hooks (harmless in play)
-window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get lessons() { return lessons; }, get charShadows() { return charShadows; }, get player() { return player; }, get rig() { return rig; }, talk: (id) => talk(entities.find((e) => e.id === id)), get state() { return state; }, get zone() { return zone; }, look };
+window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get lessons() { return lessons; }, get charShadows() { return charShadows; }, get player() { return player; }, get rig() { return rig; }, talk: (id) => talk(typeof id === "string" ? entities.find((e) => e.id === id) : id), get state() { return state; }, get zone() { return zone; }, look };
 applyPreferences();
 setQuality(quality);
 refreshHUD();
