@@ -177,3 +177,15 @@ Większe rzeczy, do których Fable 5.2 nadaje się najlepiej (długa, samodzieln
 
 Punkty 4 (Wielka Sala) i 12 (twarze) z listy wyżej też są zadaniami tego typu: wymagają wielu rund „zbuduj w Blenderze → wyrenderuj → obejrzyj → popraw”.
 
+
+
+---
+
+## Stan na 10 listopada 2026 (Fable 5.2)
+
+Zrobione na gałęzi `animacje-postaci`:
+- **Nawigacja po całym zamku** (`nav.js`, `schedule.js`, `castle-life.js`): graf przejść, ruchome schody, plan dnia, dzwon, woźny na obchodzie, nauczycielka dyżurna. To zamyka propozycję F5.
+- **Wielka Sala** (`great-hall.js`): zaczarowany sufit, 420 świec, uczta na dzwon posiłku, uczniowie przy stołach domów. Z punktu 4 zostało wypalanie światła w Blenderze (wymaga karty graficznej Maćka) i architektura z Blendera.
+- **Postacie**: twarze 2.0 (większe oczy osadzone niżej i bliżej, krótszy nos, szersze usta, pełniejsze policzki), scalona siatka na dal `Body_LOD2` z paletą kolorów, jeden szkielet na postać. To zamyka F1 i pierwszą część punktu 12.
+
+Zostaje z punktu 12: osobne typy twarzy (kształt szczęki, nosa i oczu jako nowe klucze kształtu), zmarszczki mimiczne.

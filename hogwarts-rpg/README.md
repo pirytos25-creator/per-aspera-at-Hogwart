@@ -61,3 +61,18 @@ Wydajność: nieruchome elementy sal i korytarzy są łączone w większe bryły
 Tryby Płynność / Wysoka / Ultra; rozdzielczość dobierana do ekranu, postprocessing, bloom, odbicia jeziora, tekstury PBR 4K, cienie, mgła, pora dnia. W trybach Wysoka i Ultra obraz przechodzi końcową korekcję (chłodne cienie, ciepłe światła, winieta, drobne ziarno, na Ultra lekka aberracja na brzegach), a postacie mają obwódkę światła w kolorze miejsca. W zamku: smugi światła z okien, witraże, poświata pochodni, kurz w powietrzu i polerowana posadzka. Przy utrzymującej się niskiej liczbie klatek tryb Wysoka automatycznie przechodzi na Płynność. Ultra wybierany ręcznie nie jest automatycznie zmieniany.
 
 Tekstury Poly Haven (CC0), lokalne licencje w `dist/assets`: Three.js (MIT), Cormorant (OFL). Dialogi i zadania są autorskie. Projekt jest nieoficjalną fanowską interpretacją świata Harry'ego Pottera.
+
+
+## Życie zamku: nawigacja i plan dnia
+
+- `dist/js/nav.js` — graf przejść przez cały zamek (Sala Wejściowa, lochy, galerie wieży, korytarze, drzwi sal). Ruchome schody są krawędziami dynamicznymi: w górę wchodzi się zawsze, w dół tylko po stronie, do której schody dobiły. Moduł nie zależy od three.js, więc ma testy w `tests/nav.test.mjs`.
+- `dist/js/schedule.js` — dzień szkolny (posiłki, trzy lekcje, przerwa, czas wolny, cisza nocna) i stałe plany lekcji uczniów.
+- `dist/js/castle-life.js` — uczniowie chodzą między piętrami, jadą na obracających się schodach, wchodzą do sal i siadają przy stołach w Wielkiej Sali.
+
+## Wielka Sala
+
+`dist/js/great-hall.js`: sufit pokazujący niebo zgrane z porą dnia, 420 lewitujących świec (dwa wywołania rysowania), uczta wyrastająca ze stołów na dzwon posiłku.
+
+## Postacie z daleka
+
+Model ma trzy poziomy: pełny, `_LOD1` i scaloną siatkę `Body_LOD2` z jednym materiałem. Kolory postaci trafiają do 16-polowej palety, a numer pola siedzi w kanale alfa koloru wierzchołka. Wszystkie części postaci korzystają z jednego szkieletu.

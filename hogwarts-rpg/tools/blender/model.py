@@ -200,10 +200,13 @@ for s, side in ((1, 'L'), (-1, 'R')):
 
 # ------------------------------------------------------------------ head surface
 HC = Vector((0, .008, 1.668))
-NOSE = [(1.618, 0.), (1.624, .002), (1.629, .009), (1.6345, .017), (1.641, .021), (1.649, .0198), (1.662, .0145), (1.68, .0088), (1.699, .0044), (1.716, 0.)]
-NOSEW = [(1.618, .006), (1.628, .0102), (1.637, .011), (1.65, .009), (1.67, .007), (1.70, .0064), (1.72, .008)]
-EYE_Z = 1.684; EYE_X = .0405; EYE_R = .0128
-MOUTH_Z = 1.6015; MOUTH_W = .0225
+NOSE = [(1.6258, 0.), (1.6314, .002), (1.6360, .009), (1.6410, .017), (1.6470, .021), (1.6544, .0198), (1.6663, .0145), (1.6829, .0088), (1.7004, .0044), (1.7160, 0.)]
+NOSEW = [(1.6258, .006), (1.6350, .0102), (1.6433, .011), (1.6553, .009), (1.6737, .007), (1.7013, .0064), (1.7197, .008)]
+# Faces 2.0: larger eyes set lower and closer together, a wider mouth, fuller cheeks and a firmer chin.
+# ED / EX are the shifts from the first layout; expression keys and brows follow them.
+EYE_Z = 1.6765; EYE_X = .0368; EYE_R = .0152
+ED = EYE_Z - 1.684; EX = EYE_X - .0405
+MOUTH_Z = 1.6085; MOUTH_W = .0255
 
 def head_shape(p):
     x, y, z = p
@@ -213,21 +216,21 @@ def head_shape(p):
     if y < -.5: yy = -.5 + (y + .5) * .62           # flatter face plane
     w = Vector((x * sx * taper, yy * sy * (1 - .13 * max(0, -z) ** 2), z * sz * (.94 if z < 0 else 1.))) + HC
     if y > 0 and z < -.2: w.y -= .022 * y * min(1, (-z - .2) / .55)      # skull tucks in above the neck
-    w.x *= 1 + .05 * exp(-(((z + .5) / .22) ** 2 + ((y - .05) / .45) ** 2))  # jaw angle
+    w.x *= 1 + .062 * exp(-(((z + .5) / .22) ** 2 + ((y - .05) / .45) ** 2))  # jaw angle
     if y < 0:
         X, Z = w.x, w.z
         k = min(1, -y / .32)
         out = 0.
-        out += .0062 * g2(X, Z - 1.709, .05, .0085)                              # brow ridge
-        out += .9 * catmull(NOSE, Z) * exp(-(X / catmull(NOSEW, Z)) ** 2)       # nose
-        out += .0055 * (g2(X - .0124, Z - 1.6365, .005, .0056) + g2(X + .0124, Z - 1.6365, .005, .0056))  # alae
-        out += .0062 * g2(X, Z - 1.604, .03, .016)                               # muzzle
-        out += .0098 * g2(X, Z - 1.558, .021, .015)                              # chin
-        out -= .0026 * g2(X, Z - 1.581, .019, .0048)                             # mentolabial sulcus
-        out += .0058 * g2(abs(X) - .052, Z - 1.627, .022, .02)                   # cheeks
-        out -= .0135 * g2(abs(X) - EYE_X, Z - EYE_Z, .0225, .0165)               # deep eye sockets
-        out -= .0011 * g2(X, Z - 1.619, .0032, .0055)                            # philtrum
-        out -= .0012 * g2(abs(X) - .03, Z - 1.613, .004, .012)                   # nasolabial hint
+        out += .0062 * g2(X, Z - (1.709 + ED), .05, .0085)                              # brow ridge
+        out += .84 * catmull(NOSE, Z) * exp(-(X / catmull(NOSEW, Z)) ** 2)       # nose
+        out += .0055 * (g2(X - .0124, Z - 1.6425, .005, .0056) + g2(X + .0124, Z - 1.6425, .005, .0056))  # alae
+        out += .0062 * g2(X, Z - 1.6085, .03, .016)                               # muzzle
+        out += .0116 * g2(X, Z - 1.558, .023, .015)                              # chin
+        out -= .0026 * g2(X, Z - 1.5855, .019, .0048)                             # mentolabial sulcus
+        out += .0078 * g2(abs(X) - .05, Z - 1.625, .024, .021)                   # cheeks
+        out -= .014 * g2(abs(X) - EYE_X, Z - EYE_Z, .0255, .019)               # deep eye sockets
+        out -= .0011 * g2(X, Z - 1.6235, .0032, .0048)                            # philtrum
+        out -= .0012 * g2(abs(X) - .03, Z - 1.6175, .004, .012)                   # nasolabial hint
         w.y -= out * k
         w.x += math.copysign(.0035, X) * g2(abs(X) - .066, Z - 1.666, .018, .014) * k   # cheekbones
     return w
@@ -271,9 +274,9 @@ for s, side in ((1, 'L'), (-1, 'R')):
             return c + d * (r + lift * (1 - v))
         ob = grid(name, fn, ring, rows, closed_u=True, material=material, uv=False)
         return orient(ob, center=c)
-    parts.append(eye_cap(f'Iris{side}', EYE_R * 1.004, math.asin(.0066 / EYE_R), M['iris'], lift=EYE_R * .035))
-    parts.append(eye_cap(f'Pupil{side}', EYE_R * 1.006, math.asin(.0027 / EYE_R), M['pupil'], lift=EYE_R * .04))
-    parts.append(ellipsoid(f'Glint{side}', tuple(c + Vector((s * .0026, -EYE_R * 1.05, .0028))), (.0012, .0005, .0012), M['glint'], seg=(8, 6)))
+    parts.append(eye_cap(f'Iris{side}', EYE_R * 1.004, math.asin(.0081 / EYE_R), M['iris'], lift=EYE_R * .035))
+    parts.append(eye_cap(f'Pupil{side}', EYE_R * 1.006, math.asin(.0033 / EYE_R), M['pupil'], lift=EYE_R * .04))
+    parts.append(ellipsoid(f'Glint{side}', tuple(c + Vector((s * .0031, -EYE_R * 1.05, .0034))), (.0015, .0005, .0015), M['glint'], seg=(8, 6)))
     eye_objs[side] = parts
 
 # lids: shells around the eyeball. Upper lid rotates on lid.L/R to blink; lower lid stays.
@@ -313,7 +316,7 @@ for s in (1, -1):
     pts = []; ws = []; ts = []
     for i in range(11):
         t = i / 10; X = s * (.0125 + t * .053)
-        Z = 1.7045 + .0068 * sin(pi * min(1, t * 1.25)) - .002 * max(0, t - .8) / .2
+        Z = 1.7045 + ED * .8 + .0068 * sin(pi * min(1, t * 1.25)) - .002 * max(0, t - .8) / .2
         Y = surf_y(bvh_head, X, Z) - .0016
         pts.append(Vector((X, Y, Z))); ws.append(.0052 - .0032 * t ** 1.3); ts.append(.0019 - .0007 * t)
     head_parts.append(set_part(sweep(f'Brow{s}', pts, ws, ts, M['hair'], lambda p: face_normal(p), ring=6), PART['brow']))
@@ -324,9 +327,9 @@ def lip_curve(upper, n=15):
     for i in range(n):
         t = i / (n - 1); X = -MOUTH_W + 2 * MOUTH_W * t; q = 1 - (X / MOUTH_W) ** 2
         if upper:
-            Z = MOUTH_Z + .0021 + .0013 * q - .0009 * exp(-(X / .0045) ** 2); r = .0011 + .0029 * q ** .7
+            Z = MOUTH_Z + .0021 + .0013 * q - .0009 * exp(-(X / .0045) ** 2); r = .0012 + .0033 * q ** .7
         else:
-            Z = MOUTH_Z - .0026 - .0013 * q; r = .0011 + .0036 * q ** .8
+            Z = MOUTH_Z - .0026 - .0013 * q; r = .0012 + .0041 * q ** .8
         Y = surf_y(bvh_head, X, Z) - r * .5
         pts.append(Vector((X, Y, Z))); rs.append(r)
     return pts, rs
@@ -810,7 +813,7 @@ def k_frown(p, t):
     w3 = g2(p.x, p.z - 1.565, .02, .014) * f; p.z += .0012 * w3      # chin tightens
     return p
 def brow_w(p, t):
-    return 1. if t == PART['brow'] else .75 * g2(abs(p.x) - .04, p.z - 1.712, .034, .017) * front(p) if t == PART['skin'] else 0.
+    return 1. if t == PART['brow'] else .75 * g2(abs(p.x) - (.04 + EX), p.z - (1.712 + ED), .034, .017) * front(p) if t == PART['skin'] else 0.
 def k_browUp(p, t):
     if t in (PART['lidU_L'], PART['lidU_R']): p.z += .0005; return p
     p.z += .0046 * brow_w(p, t)
@@ -821,7 +824,7 @@ def k_browAngry(p, t):
     if w:
         fi = inner(p); p.z -= .0044 * fi * w; p.x -= math.copysign(.0019, p.x) * fi * w; p.z += .0012 * (1 - fi) * w
     if t == PART['skin']:
-        g = g2(p.x, p.z - 1.704, .012, .01) * front(p); p.y -= .0012 * g; p.z -= .0016 * g
+        g = g2(p.x, p.z - (1.704 + ED), .012, .01) * front(p); p.y -= .0012 * g; p.z -= .0016 * g
     return p
 def k_browSad(p, t):
     w = brow_w(p, t)
@@ -842,10 +845,10 @@ def k_mouthWide(p, t):
 def k_squint(p, t):
     if t == PART['lidL']: return rot_x(p, EYE_C[eye_side(p)], radians(-9))
     if t == PART['skin']:
-        w = g2(abs(p.x) - .043, p.z - 1.664, .02, .01) * front(p); p.z += .0016 * w
+        w = g2(abs(p.x) - (.043 + EX), p.z - (1.664 + ED), .02, .01) * front(p); p.z += .0016 * w
     return p
 # identity (set once per character)
-def below_eyes(p): return sm((1.662 - p.z) / .05)
+def below_eyes(p): return sm((1.662 + ED - p.z) / .05)
 def k_soft(p, t):
     if t in LIDS or t == PART['lidL']: return p
     p.x *= 1 - .075 * below_eyes(p) * sm((HC.y + .06 - p.y) / .12)
@@ -862,7 +865,7 @@ def k_old(p, t):
     if t == PART['skin']:
         p.z -= .003 * g2(abs(p.x) - .05, p.z - 1.618, .022, .03) * f            # cheeks sag
         p.x += math.copysign(.0032, p.x) * g2(abs(p.x) - .05, p.z - 1.578, .016, .016) * f  # jowls
-        p.y -= .0016 * g2(abs(p.x) - .041, p.z - 1.667, .014, .0045) * f       # eye bags
+        p.y -= .0016 * g2(abs(p.x) - (.041 + EX), p.z - (1.667 + ED), .014, .0045) * f       # eye bags
         p.x -= math.copysign(.0035, p.x) * g2(abs(p.x) - .082, p.z - 1.7, .015, .02)       # hollow temples
         tip = g2(p.x, p.z - 1.636, .012, .012) * f; p.z -= .0024 * tip; p.y -= .0012 * tip   # longer nose
     for s in (1, -1):
@@ -1087,6 +1090,9 @@ def face_tint(co, c):
     r, g, b = c
     blush = .55 * g2(abs(p.x) - .05, p.z - 1.632, .02, .018) + .35 * g2(p.x, p.z - 1.638, .009, .01)
     r *= 1 + .05 * blush; g *= 1 - .07 * blush; b *= 1 - .08 * blush
+    # the short gap between nose and lip bakes very dark; lift it so it does not read as a smudge
+    lift = 1 + .5 * g2(p.x, p.z - 1.6205, .013, .0075)
+    r *= lift; g *= lift; b *= lift
     sock = g2(abs(p.x) - EYE_X, p.z - (EYE_Z + .004), .02, .013)
     r *= 1 - .06 * sock; g *= 1 - .08 * sock; b *= 1 - .05 * sock
     return (min(1, r), min(1, g), min(1, b))
