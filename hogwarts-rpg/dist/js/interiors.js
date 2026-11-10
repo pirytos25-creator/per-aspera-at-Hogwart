@@ -690,8 +690,8 @@ export function createInterior(room) {
       box(fabrics[row], x, 9, -16.7, 2, 5, 0.06);
       cone(gold, x, 6.25, -16.7, 1, 0.7, 0, Math.PI);
     }
-    box(stone, 0, 0.3, -14.5, 24, 0.6, 5);
-    table(0, -14.5, 21, 1.8, 1.8);
+    box(stone, 0, 0.04, -14.5, 24, 0.08, 5);
+    table(0, -14.5, 21, 1.8, 1.25);
     for (let x = -9; x <= 9; x += 3) chair(x, -15.5);
     label("DRACO DORMIENS NUNQUAM TITILLANDUS", "", 0, 10.8, -17.3, 9);
     // enchanted ceiling, floating candles and the feast live in their own module
@@ -980,9 +980,13 @@ export function createInterior(room) {
         ball(pale, side * 13.12, 5.3, z, 0.43, 0.12, 1.3, 1);
       }
     if (/stair|schod/i.test(id)) {
-      for (let k = 0; k < 18; k++) box(stone, -7, k * 0.25, 9 - k * 0.85, 5, 0.5, 0.95);
-      for (let k = 0; k < 18; k++) cyl(gold, -9.4, k * 0.25 + 1, 9 - k * 0.85, 0.04, 1.8);
-      beam([-9.4, 1.8, 9], [-9.4, 6.05, -5.45], 0.08, gold);
+      // a solid flight (steps reach the floor), railed on both sides, and you cannot walk through it
+      for (let k = 0; k < 18; k++) box(stone, -7, (k * 0.25 + 0.25) / 2, 9 - k * 0.85, 5, k * 0.25 + 0.25, 0.95);
+      for (const rx of [-9.4, -4.6]) {
+        for (let k = 0; k < 18; k += 2) cyl(gold, rx, k * 0.25 + 0.25 + 0.55, 9 - k * 0.85, 0.04, 1.1);
+        beam([rx, 1.35, 9], [rx, 5.6, -5.45], 0.08, gold);
+      }
+      colliders.push({ x: -7, z: 1.78, w: 5.3, d: 15.6, height: 4.8 });
     } else {
       for (let x of [-8, 8])
         for (let z of [-10, 2, 10]) {
@@ -998,7 +1002,7 @@ export function createInterior(room) {
 
   const professor = typeof room.professor === "string" ? room.professor : room.professor?.name || "";
   let teacherPosition = [0, 0, -10];
-  if (type === "hall") teacherPosition = [0, 0.6, -13];
+  if (type === "hall") teacherPosition = [0, 0.08, -12.9];
   else if (type === "potions") teacherPosition = [2, 0, -10];
   else if (type === "astronomy") teacherPosition = [3, 0, -8];
   else if (type === "herbology") teacherPosition = [2, 0, -11];

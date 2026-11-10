@@ -308,7 +308,7 @@ void main(){
  // fixed flights
  flight(bands.T,0,9.6,G,0,3,4);ramp({x0:-1.6,x1:1.6,z0:3,z1:9.8,ramp:'z',c0:9.6,c1:3,y0:G,y1:4});
  flight(bands.T,-11,0,FLOORS.F1,-3,0,FLOORS.F1+4);ramp({x0:-11.2,x1:-3,z0:-1.6,z1:1.6,ramp:'x',c0:-11,c1:-3,y0:FLOORS.F1,y1:FLOORS.F1+4});
- flight(bands.T,11,0,FLOORS.F2,3,0,FLOORS.F2+4);ramp({x0:3,x1:11.2,z0:-1.6,z1:1.6,ramp:'x',c0:11,c1:3,y0:FLOORS.F2,y1:FLOORS.F2+4});
+ flight(bands.T,0,11,FLOORS.F2,0,3,FLOORS.F2+4);ramp({x0:-1.6,x1:1.6,z0:3,z1:11.2,ramp:'z',c0:11,c1:3,y0:FLOORS.F2,y1:FLOORS.F2+4});
  // turning platforms: each carries one flight up to the next gallery; they rotate between allowed landings
  const platforms=[];
  for(const [y,dirs] of PLATFORM_DIRS.map((d,i)=>[4+i*8,d])){

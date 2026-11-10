@@ -9,7 +9,7 @@ const doors = [
   { id: 'potions', corridor: 'D', x: 48, y: -8, z: 31 }, { id: 'great-hall', corridor: 'G', x: -14.5, y: 0, z: 29 },
 ];
 const nav = createNav({ doors });
-const docked = (i) => PLATFORM_DIRS.map((d) => d[i]);
+const docked = (i) => PLATFORM_DIRS.map((d) => d[i % d.length]);
 
 test('platform angles map to gallery sides', () => {
   assert.equal(sideOfAngle(0), 'E'); assert.equal(sideOfAngle(Math.PI / 2), 'N');
@@ -44,7 +44,7 @@ test('going down boards a platform only on the side where it is docked', () => {
 });
 
 test('points along edges are continuous, also over a turning platform', () => {
-  for (const angle of [0, Math.PI / 2, Math.PI]) {
+  for (const angle of [0, Math.PI / 2]) {
     const path = nav.route('hallC', 'door:charms', { platTo: [angle, 0, 0] });
     let last = null;
     for (const e of path) {
@@ -66,6 +66,15 @@ test('the platform flight rises from the deck to the gallery above', () => {
   assert.ok(Math.abs(p.x) < 1e-6 && p.z < -11);
   const down = nav.adj.get('ptop1').find((e) => e.kind === 'plat');
   assert.equal(nav.point(down, 0, 0).y, 16); assert.equal(nav.point(down, down.len, 0).y, 12);
+});
+
+test('no turning flight is ever stacked over a fixed flight', () => {
+  const arrive = ['S', 'W', 'S'], leaveAbove = ['W', 'S', null];
+  PLATFORM_DIRS.forEach((dirs, i) => {
+    for (const a of dirs) { const side = sideOfAngle(a); assert.notEqual(side, arrive[i]); assert.notEqual(side, leaveAbove[i]); }
+    for (let k = 0; k < dirs.length; k++) assert.ok(sidesAdjacent(sideOfAngle(dirs[k]), sideOfAngle(dirs[(k + 1) % dirs.length])), 'quarter turns only');
+  });
+  assert.equal(nav.nodes.get('fix1a').x, -11); assert.equal(nav.nodes.get('fix2a').z, 11);
 });
 
 test('nearest node respects the floor', () => {

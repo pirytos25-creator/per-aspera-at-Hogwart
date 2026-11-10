@@ -8,10 +8,14 @@
 
 export const FLOOR_Y = { D: -8, G: 0, F1: 8, F2: 16, F3: 24 };
 // landing directions of the three turning platforms (shared with castle.js)
+// A turning flight never points at the side where a fixed flight arrives at its deck or leaves the
+// gallery above: two flights stacked over the same steps leave no headroom. Fixed flights use the
+// south, west and south sides, so the platforms swing between east, north (and west on the top one),
+// always in quarter turns.
 export const PLATFORM_DIRS = [
-  [0, Math.PI / 2, Math.PI],
-  [0, Math.PI / 2, -Math.PI / 2],
-  [Math.PI / 2, Math.PI, -Math.PI / 2],
+  [0, Math.PI / 2],
+  [0, Math.PI / 2],
+  [0, Math.PI / 2, Math.PI, Math.PI / 2],
 ];
 export const NAV_CORRIDORS = [
   { id: 'D', y: -8, axis: 'x', sign: 1, center: 34, from: 33, to: 156 },
@@ -69,7 +73,7 @@ export function createNav({ doors = [], platformDirs = PLATFORM_DIRS } = {}) {
   const fixed = [
     { foot: ['fix0a', 0, 0, 9.8], top: ['fix0b', 0, 4, 3], from: 'towerG' },
     { foot: ['fix1a', -11, 8, 0], top: ['fix1b', -3, 12, 0], from: 'ring:F1:W' },
-    { foot: ['fix2a', 11, 16, 0], top: ['fix2b', 3, 20, 0], from: 'ring:F2:E' },
+    { foot: ['fix2a', 0, 16, 11], top: ['fix2b', 0, 20, 3], from: 'ring:F2:S' },
   ];
   fixed.forEach((f, i) => {
     const py = 4 + i * 8, L = LEVELS[i];
@@ -80,8 +84,7 @@ export function createNav({ doors = [], platformDirs = PLATFORM_DIRS } = {}) {
     // the far end of the platform flight moves with the platform; its node holds the platform-local spot
     node(`ptop${i}`, FLIGHT_LEN, py + 4, 0, { band: 'T', plat: i, dynamic: true });
     link(`deck${i}`, `ptop${i}`, { kind: 'plat', plat: i, len: FLIGHT_LEN, w: 0.75, stairs: true });
-    for (const a of platformDirs[i]) {
-      const side = sideOfAngle(a);
+    for (const side of new Set(platformDirs[i].map(sideOfAngle))) {
       link(`ptop${i}`, `ring:${L}:${side}`, { kind: 'land', plat: i, side, len: RING_R - FLIGHT_LEN, w: 0.5 });
     }
   });

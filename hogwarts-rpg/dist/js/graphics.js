@@ -50,7 +50,7 @@ const GradeShader = {
     aspect: { value: 16 / 9 },
     vignette: { value: 0.3 },
     grain: { value: 0.028 },
-    aberration: { value: 0.0016 },
+    aberration: { value: 0.00014 },
     split: { value: 0.1 },
     shadowTint: { value: new THREE.Color("#4f6f8f") },
     highlightTint: { value: new THREE.Color("#ffd2a0") },
@@ -166,7 +166,7 @@ export function createGraphics(renderer, scene, camera) {
     contact.enabled = preset.ao && hdr && (!interior || quality === "ultra");
     grade.enabled = quality !== "balanced";
     grade.uniforms.aspect.value = width / height;
-    grade.uniforms.aberration.value = quality === "ultra" ? 0.0016 : 0;
+    grade.uniforms.aberration.value = quality === "ultra" ? 0.00014 : 0;
     grade.uniforms.grain.value = grainOn ? (quality === "ultra" ? 0.028 : 0.02) : 0;
     grade.uniforms.vignette.value = quality === "ultra" ? 0.32 : 0.26;
     contact.setSize(
