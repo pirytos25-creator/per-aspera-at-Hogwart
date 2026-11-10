@@ -1,4 +1,5 @@
 import * as THREE from "../assets/three.module.js";
+import { createHallMagic, HALL_TABLE_X, HALL_BENCH_X } from "./great-hall.js";
 
 // Individually furnished rooms share an instanced architectural vocabulary.
 // All coordinates are local; the entrance is at +Z, the teaching dais at -Z.
@@ -655,11 +656,13 @@ export function createInterior(room) {
       put(geo, pale);
       disposable.push(geo);
     }
-    for (const side of [-1, 1]) {
-      put(unit.box, darkStone, side * 7, 14.5, 0, 16.4, 0.25, 37, 0, 0, -side * 0.46);
+    if (type !== "hall") {
+      for (const side of [-1, 1]) {
+        put(unit.box, darkStone, side * 7, 14.5, 0, 16.4, 0.25, 37, 0, 0, -side * 0.46);
+      }
+      // A separate high canopy leaves every window and vault visible from a walking camera.
+      box(darkStone, 0, 18.3, 0, 29, 0.25, 37);
     }
-    // A separate high canopy leaves every window and vault visible from a walking camera.
-    box(type === "hall" ? black : darkStone, 0, 18.3, 0, 29, 0.25, 37);
     for (let x = -7; x <= 7; x += 7) archWindow(x, 5, -17.45, 0, 3, 7.5);
     if (!embedded) put(pointed(3.7, 6), darkWood, 0, 0, 17.46, 1, 1, 1, 0, Math.PI);
     put(pointed(4.1, 6.3, true), pale, 0, 0, 17.4, 1, 1, 1, 0, Math.PI);
@@ -668,18 +671,19 @@ export function createInterior(room) {
 
   // Each room has a distinct arrangement and silhouette.
   if (type === "hall") {
+    // four house tables with real aisles between them (the benches sit clear of the next table)
     for (let row = 0; row < 4; row++) {
-      const x = (row - 1.5) * 5.1;
-      table(x, 1, 3.6, 23, 1.25);
+      const x = HALL_TABLE_X[row];
+      table(x, 1, 2.2, 23, 1.25);
       for (const side of [-1, 1]) {
-        box(wood, x + side * 2.05, 0.7, 1, 0.5, 0.18, 23);
-        for (let z = -9; z <= 11; z += 4) box(darkWood, x + side * 2.05, 0.35, z, 0.2, 0.7, 0.3);
+        box(wood, x + side * HALL_BENCH_X, 0.7, 1, 0.5, 0.18, 23);
+        for (let z = -9; z <= 11; z += 4) box(darkWood, x + side * HALL_BENCH_X, 0.35, z, 0.2, 0.7, 0.3);
       }
       for (let z = -9; z <= 11; z += 2) {
         for (const side of [-1, 1]) {
-          cyl(gold, x + side * 1.1, 1.38, z, 0.3, 0.045);
-          cyl(gold, x + side * 0.65, 1.55, z + 0.3, 0.1, 0.35);
-          box(iron, x + side * 1.55, 1.38, z, 0.045, 0.02, 0.5);
+          cyl(gold, x + side * 0.7, 1.38, z, 0.26, 0.045);
+          cyl(gold, x + side * 0.3, 1.55, z + 0.36, 0.085, 0.35);
+          box(iron, x + side * 1.02, 1.38, z, 0.04, 0.02, 0.42);
         }
         candle(x, 1.35, z, 1.1);
       }
@@ -690,19 +694,11 @@ export function createInterior(room) {
     table(0, -14.5, 21, 1.8, 1.8);
     for (let x = -9; x <= 9; x += 3) chair(x, -15.5);
     label("DRACO DORMIENS NUNQUAM TITILLANDUS", "", 0, 10.8, -17.3, 9);
-    for (let i = 0; i < 64; i++) {
-      const x = (random() - 0.5) * 23,
-        z = (random() - 0.5) * 30,
-        y = 7 + random() * 7;
-      candle(x, y, z, 0.7);
-    }
-    const starPts = [];
-    for (let i = 0; i < 300; i++) starPts.push((random() - 0.5) * 27, 18.05, (random() - 0.5) * 35);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.Float32BufferAttribute(starPts, 3));
-    const mat = new THREE.PointsMaterial({ color: "#e3e5d7", size: 0.045 });
-    group.add(new THREE.Points(geo, mat));
-    disposable.push(geo, mat);
+    // enchanted ceiling, floating candles and the feast live in their own module
+    const magic = createHallMagic({ random });
+    group.add(magic.group);
+    animated.push({ kind: "magic", magic });
+    disposable.push(magic);
   } else if (type === "classroom") {
     for (let row = 0; row < 4; row++)
       for (const side of [-1, 1]) {
@@ -1181,7 +1177,8 @@ export function createInterior(room) {
           a.mesh.position.y = a.base.y + ((time * 0.2 + a.phase * 0.2) % 1) * a.s;
           a.mesh.position.x = a.base.x + Math.sin(time * 0.5 + a.phase) * 0.12;
           a.mesh.material.opacity = 0.065 + Math.sin(time + a.phase) * 0.025;
-        } else if (a.kind === "fire") a.mesh.intensity = 24 + Math.sin(time * 7) * 2 + Math.sin(time * 11) * 2;
+        } else if (a.kind === "magic") a.magic.update(time);
+        else if (a.kind === "fire") a.mesh.intensity = 24 + Math.sin(time * 7) * 2 + Math.sin(time * 11) * 2;
       }
     },
     dispose() {

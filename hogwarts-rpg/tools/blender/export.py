@@ -1,4 +1,4 @@
-import bpy, sys, os
+import bpy, bmesh, sys, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 bpy.ops.wm.read_factory_settings(use_empty=True)
 exec(open(os.path.join(HERE, 'model.py')).read())
@@ -26,10 +26,57 @@ for ob in [o for o in FINAL]:
     m = cp.modifiers.new('Armature', 'ARMATURE'); m.object = rig
     cp.parent = rig
 
+# ---------------------------------------------------------------- LOD2: one merged mesh for far characters
+# Every body part becomes a single skinned mesh with a single material. The per-corner colour keeps the baked
+# shading in RGB and a palette slot in alpha; the game fills a 16-colour palette per character (skin, hair,
+# robe, house colour...), so a far character costs one draw call instead of twenty-odd.
+import numpy as np
+PALETTE = ['M_Skin', 'M_Hair', 'M_Robe', 'M_Lining', 'M_Vest', 'M_Shirt', 'M_Trousers', 'M_Shoes', 'M_Lips',
+           'M_EyeWhite', 'M_Iris', 'M_Pupil', 'M_Gold', 'M_Wand', 'M_Book', 'M_Page']
+FAR_DROP = {'M_Lash', 'M_EyeGlint', 'M_Mouth', 'M_Teeth'}
+FAR_PARTS = ['Head', 'Eye.L', 'Eye.R', 'Neck', 'Torso', 'Legs', 'Arm.L', 'Arm.R', 'Hand.L', 'Hand.R', 'Shoe.L', 'Shoe.R',
+             'Robe', 'Hood', 'Sleeve.L', 'Sleeve.R', 'Wand']
+far_mat = bpy.data.materials.new('M_Far')
+far = []
+for name in FAR_PARTS:
+    src = bpy.data.objects[name + '_LOD1']
+    cp = src.copy(); cp.data = src.data.copy(); cp.name = name + '_far'; COL.objects.link(cp); cp.modifiers.clear()
+    me = cp.data
+    names = [m.name for m in me.materials]
+    bm = bmesh.new(); bm.from_mesh(me)
+    doomed = [f for f in bm.faces if names[f.material_index] in FAR_DROP]
+    if doomed: bmesh.ops.delete(bm, geom=doomed, context='FACES')
+    bm.to_mesh(me); bm.free()
+    nl = len(me.loops)
+    rgba = np.ones((nl, 4), dtype=np.float32)
+    old = me.color_attributes.active_color
+    if old is not None:
+        if old.domain == 'CORNER':
+            buf = np.empty(nl * 4, dtype=np.float32); old.data.foreach_get('color', buf); rgba = buf.reshape(-1, 4).copy()
+        else:
+            buf = np.empty(len(me.vertices) * 4, dtype=np.float32); old.data.foreach_get('color', buf)
+            vi = np.empty(nl, dtype=np.int32); me.loops.foreach_get('vertex_index', vi); rgba = buf.reshape(-1, 4)[vi].copy()
+    for poly in me.polygons:
+        slot = PALETTE.index(names[poly.material_index])
+        rgba[poly.loop_start:poly.loop_start + poly.loop_total, 3] = (slot + .5) / 16
+        poly.material_index = 0
+    for ca in list(me.color_attributes): me.color_attributes.remove(ca)
+    col = me.color_attributes.new('Far', 'FLOAT_COLOR', 'CORNER'); col.data.foreach_set('color', rgba.ravel())
+    me.color_attributes.active_color = col; me.color_attributes.render_color_index = 0
+    me.materials.clear(); me.materials.append(far_mat)
+    far.append(cp)
+with bpy.context.temp_override(active_object=far[0], selected_editable_objects=far, object=far[0]):
+    bpy.ops.object.join()
+body_far = far[0]; body_far.name = 'Body_LOD2'; body_far.data.name = 'Body_LOD2'
+for p in body_far.data.polygons: p.use_smooth = True
+body_far.parent = rig
+m = body_far.modifiers.new('Armature', 'ARMATURE'); m.object = rig
+body_far.data.calc_loop_triangles(); print('FAR', len(body_far.data.vertices), 'verts', len(body_far.data.loop_triangles), 'tris')
+
 tris = {0: 0, 1: 0}
 for ob in bpy.data.objects:
     if ob.type == 'MESH':
-        ob.data.calc_loop_triangles(); tris[1 if ob.name.endswith('_LOD1') else 0] += len(ob.data.loop_triangles)
+        ob.data.calc_loop_triangles(); tris[1 if ob.name.endswith(('_LOD1', '_LOD2')) else 0] += len(ob.data.loop_triangles)
 print('TRIS', tris)
 out = sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else os.path.join(HERE, '..', '..', 'dist', 'assets', 'models', 'wizard-raw.glb')
 kw = dict(filepath=out, export_format='GLB', export_animations=True, export_animation_mode='ACTIONS', export_skins=True,

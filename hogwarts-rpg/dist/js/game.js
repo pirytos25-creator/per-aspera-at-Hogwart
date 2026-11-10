@@ -12,6 +12,7 @@ import { createCameraRig } from "./camera-rig.js";
 import { createDuels, DUELISTS } from "./duel.js";
 import { createCastle, CASTLE_ROOMS, FLOORS } from "./castle.js";
 import { createCastleLife } from "./castle-life.js";
+import { castleState } from "./castle-state.js";
 import { createLessons, PATTERNS, SPELL_PATTERN } from "./lessons.js";
 import { createCharacterShadows } from "./char-shadows.js";
 import { batchStatic } from "./batch.js";
@@ -733,6 +734,7 @@ function setLighting() {
   environment.setInterior(inside);
   graphics.setInterior(inside);
   sky.setTime(timeMode);
+  castleState.skyMode = timeMode;
   environment.setTime(timeMode);
   atmosphere.setTime(timeMode);
   scene.fog = new T.FogExp2(inside ? "#253137" : timeMode === 1 ? "#182f41" : "#839d9b", inside ? 0.009 : timeMode === 1 ? 0.003 : 0.0018);
@@ -2566,7 +2568,7 @@ function frame(now) {
   }
 }
 // test and debugging hooks (harmless in play)
-window.__hp = { sim: simulate, world, travel, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get lessons() { return lessons; }, get charShadows() { return charShadows; }, get player() { return player; }, get rig() { return rig; }, talk: (id) => talk(typeof id === "string" ? entities.find((e) => e.id === id) : id), get state() { return state; }, get zone() { return zone; }, look };
+window.__hp = { sim: simulate, world, travel, renderer, scene, camera, get castle() { return castle; }, get velocity() { return velocity; }, get keys() { return [...keys]; }, get paused() { return paused(); }, get playerPos() { return playerPos; }, get entities() { return entities; }, get life() { return life; }, get nearby() { return nearby; }, get lessons() { return lessons; }, get charShadows() { return charShadows; }, get player() { return player; }, get rig() { return rig; }, talk: (id) => talk(typeof id === "string" ? entities.find((e) => e.id === id) : id), get state() { return state; }, get zone() { return zone; }, look };
 applyPreferences();
 setQuality(quality);
 refreshHUD();

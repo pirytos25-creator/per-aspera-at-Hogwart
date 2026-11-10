@@ -98,6 +98,21 @@ function blobShadow(){
  if(!shadowTexture){const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d'),g=x.createRadialGradient(32,32,2,32,32,30);g.addColorStop(0,'#0009');g.addColorStop(1,'#0000');x.fillStyle=g;x.fillRect(0,0,64,64);shadowTexture=new T.CanvasTexture(c);}
  const g=new T.PlaneGeometry(1.25,1.25),m=new T.MeshBasicMaterial({map:shadowTexture,transparent:true,depthWrite:false});const mesh=new T.Mesh(g,m);mesh.rotation.x=-Math.PI/2;mesh.position.y=.02;mesh.userData.skipAO=true;mesh.renderOrder=-1;return mesh;
 }
+// Far characters are one merged mesh (Body_LOD2) with one material. Its vertex colour carries the baked
+// shading in RGB and a palette slot in alpha; each character owns a 16-texel palette with its colours.
+const PALETTE=['M_Skin','M_Hair','M_Robe','M_Lining','M_Vest','M_Shirt','M_Trousers','M_Shoes','M_Lips','M_EyeWhite','M_Iris','M_Pupil','M_Gold','M_Wand','M_Book','M_Page'];
+const HEADGEAR=/^(Hair_|Hat|Beard)/,FAR_K=1.5;
+function farMaterial(colours){
+ const data=new Uint8Array(64),c=new T.Color();
+ PALETTE.forEach((n,i)=>{c.copy(colours[n]||c.set('#808080')).convertLinearToSRGB();data.set([Math.round(c.r*255),Math.round(c.g*255),Math.round(c.b*255),255],i*4);});
+ const tex=new T.DataTexture(data,16,1,T.RGBAFormat);tex.colorSpace=T.SRGBColorSpace;tex.magFilter=tex.minFilter=T.NearestFilter;tex.needsUpdate=true;
+ const m=new T.MeshStandardMaterial({vertexColors:true,roughness:.82,metalness:0});m.name='M_Far';m.userData.palette=tex;
+ m.onBeforeCompile=sh=>{sh.uniforms.palette={value:tex};
+  sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nuniform sampler2D palette;')
+   .replace('#include <color_fragment>','diffuseColor.rgb*=vColor.rgb*texture2D(palette,vec2((floor(vColor.a*16.)+.5)/16.,.5)).rgb;');};
+ m.customProgramCacheKey=()=>'far-palette';
+ return m;
+}
 const smooth=x=>{x=Math.min(1,Math.max(0,x));return x*x*(3-2*x);};
 const damp=(a,b,r,dt)=>a+(b-a)*(1-Math.exp(-r*dt));
 const clamp=T.MathUtils.clamp;
@@ -122,11 +137,13 @@ export function createActor(options={}){
  let accent=null;
  const rigNode=model.getObjectByName('WizardRig')||model;
  const parts=rigNode.children.filter(c=>!c.isBone);
- const lod=[[],[]],wantHair=HAIR[style]||HAIR.short,headMeshes=[],detail=[];
+ const lod=[[],[]],wantHair=HAIR[style]||HAIR.short,headMeshes=[],detail=[],used={};
+ let far=null,farMat=null;
  // small facial parts only matter up close: hidden on the far model and beyond a few metres
  const DETAIL=new Set(['M_Teeth','M_Mouth','M_Lash','M_EyeGlint']);
  for(const o of parts){
   const base=o.name.replace(/_LOD1$/,''),isLod=o.name!==base;
+  if(base==='Body_LOD2'){far=o;continue;}
   let show=true;
   if(base==='Hat')show=!!hat;else if(base==='Beard')show=!!beard;else if(base==='Book')show=false;else if(base.startsWith('Hair_'))show=base===wantHair;
   o.userData.wanted=show;o.userData.base=base;lod[isLod?1:0].push(o);
@@ -137,13 +154,38 @@ export function createActor(options={}){
    if(DETAIL.has(mn)){if(isLod)m.visible=false;else detail.push(m);}
    const swap=mt=>{
     if(mt.name==='M_Lining'){if(!accent){accent=upgrade(mt,null).clone();accent.color.set(color);}return accent;}
-    const k=TINT[mt.name];return upgrade(mt,k?colours[k]:null);
+    const k=TINT[mt.name];return used[mt.name]=upgrade(mt,k?colours[k]:null);
    };
    m.material=Array.isArray(m.material)?m.material.map(swap):swap(m.material);
    if(base==='Head'&&!isLod&&m.morphTargetDictionary)headMeshes.push(m);
   });
  }
- const setLodVisibility=level=>{for(let i=0;i<2;i++)for(const o of lod[i])o.visible=o.userData.wanted&&i===level;};
+ // Every part arrives with its own copy of the same skeleton, so the bones would be computed and
+ // uploaded once per part (thirty times per character). Bind them all to one skeleton instead.
+ // Compression gives each part its own position scale, folded into its inverse bind matrices as
+ // IBM_part = IBM_shared * Q; the same Q moved into the part's bind matrix gives identical skinning.
+ {let sk=null;const Q=new T.Matrix4(),chk=new T.Matrix4();
+  model.traverse(o=>{
+   if(!o.isSkinnedMesh)return;if(!sk){sk=o.skeleton;return;}
+   const a=o.skeleton;if(a===sk||a.bones.length!==sk.bones.length)return;
+   for(let i=0;i<a.bones.length;i++)if(a.bones[i]!==sk.bones[i])return;
+   Q.copy(sk.boneInverses[0]).invert().multiply(a.boneInverses[0]);
+   for(let i=1;i<a.bones.length;i++){chk.multiplyMatrices(sk.boneInverses[i],Q);const x=chk.elements,y=a.boneInverses[i].elements;for(let k=0;k<16;k++)if(Math.abs(x[k]-y[k])>2e-3*(1+Math.abs(y[k])))return;}
+   o.bind(sk,Q.multiply(o.bindMatrix));
+  });}
+ if(far){
+  const mesh=[];far.traverse(m=>{if(m.isMesh)mesh.push(m);});
+  if(mesh.length&&mesh.every(m=>m.geometry.attributes.color?.itemSize===4)){
+   const cols={};for(const n of PALETTE)if(used[n])cols[n]=used[n].color;if(accent)cols.M_Lining=accent.color;
+   farMat=farMaterial(cols);
+   for(const m of mesh){m.material=farMat;m.receiveShadow=true;m.castShadow=false;m.layers.set(ACTOR_LAYER);m.frustumCulled=false;}
+  }else{far.visible=false;far=null;}
+ }
+ const setLodVisibility=level=>{
+  const lv=Math.min(level,1),useFar=level===2&&!!far;
+  for(let i=0;i<2;i++)for(const o of lod[i])o.visible=o.userData.wanted&&i===lv&&(!useFar||HEADGEAR.test(o.userData.base));
+  if(far)far.visible=useFar;
+ };
  setLodVisibility(0);
  const book=parts.find(o=>o.name==='Book'),bookLod=parts.find(o=>o.name==='Book_LOD1');
  const bone=n=>model.getObjectByName(n);
@@ -228,7 +270,8 @@ export function createActor(options={}){
    const speed=typeof motion==='number'?motion:motion.speed||0,side=typeof motion==='number'?0:motion.side||0,back=typeof motion==='object'&&!!motion.back;
    if(CAMERA){
     dist=CAMERA.position.distanceTo(root.getWorldPosition(_v));
-    const want=dist>LOD_DISTANCE*1.08?1:dist<LOD_DISTANCE*.92?0:lodLevel;
+    const t2=LOD_DISTANCE*FAR_K,above1=lodLevel>=1?dist>LOD_DISTANCE*.92:dist>LOD_DISTANCE*1.08,above2=lodLevel>=2?dist>t2*.94:dist>t2*1.06;
+    const want=far&&above2?2:above1?1:0;
     if(want!==lodLevel){lodLevel=want;setLodVisibility(lodLevel);}
     // far actors are animated at a lower rate
     const every=dist>55?4:dist>30?2:1;skipped+=dt;
@@ -292,7 +335,7 @@ export function createActor(options={}){
    const casting=gestures.some(g=>g.name==='cast'||g.name.startsWith('spell'));
    tip.visible=casting||!!lumosGlow;tip.scale.setScalar(casting?.016+Math.sin(time*40)*.004:.014);
   },
-  dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(model);accent?.dispose();tipMaterial.dispose();tipGeometry.dispose();root.traverse(o=>{if(o.isMesh&&o.material?.map===shadowTexture){o.geometry.dispose();o.material.dispose();}});}
+  dispose(){if(disposed)return;disposed=true;mixer.stopAllAction();mixer.uncacheRoot(model);accent?.dispose();farMat?.userData.palette.dispose();farMat?.dispose();tipMaterial.dispose();tipGeometry.dispose();root.traverse(o=>{if(o.isMesh&&o.material?.map===shadowTexture){o.geometry.dispose();o.material.dispose();}});}
  };
  // ---------------------------------------------------------------- arm IK
  const _S=new T.Vector3(),_E=new T.Vector3(),_Wr=new T.Vector3(),_Tg=new T.Vector3(),_fw=new T.Vector3(),_rt=new T.Vector3(),_UP=new T.Vector3(0,1,0),

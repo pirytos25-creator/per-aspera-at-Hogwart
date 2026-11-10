@@ -3,6 +3,8 @@ import {FLOORS} from './castle.js';
 import {createNav,bandOfPos,sidesAdjacent} from './nav.js';
 import {periodAt,planFor,dutyPost,PATROL} from './schedule.js';
 import {ROOMS} from './data.js';
+import {castleState} from './castle-state.js';
+import {HALL_SEATS,HALL_BENCH_LIFT} from './great-hall.js';
 
 // The castle's everyday life: students walk the corridors, sit on benches with a book,
 // stop to chat in pairs and wave when you pass. A ghost drifts straight through walls,
@@ -111,9 +113,26 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
   const list=[...nav.nodes.values()].filter(n=>n.corridor===band&&n.along!==undefined);
   return list.length?rnd(list).id:'hallC';
  }
+ // students who went in for a meal sit at their house table whenever the Great Hall is on screen
+ const hallSlot=castle.slots.find(s=>s.id==='great-hall'),hallTaken=new Array(HALL_SEATS.length).fill(null);
+ const HOUSE_ROW={Gryffindor:0,Hufflepuff:1,Ravenclaw:2,Slytherin:3};
+ function seatInHall(e){
+  const L=hallSlot?.loaded;if(!L)return;
+  const row=HOUSE_ROW[e.house]??(e.idx%4),free=[];
+  HALL_SEATS.forEach((s,i)=>{if(s.row===row&&!hallTaken[i])free.push(i);});
+  if(!free.length)return;
+  // sit near the others, facing a neighbour across the table when there is one
+  const i=free[(e.idx*7)%Math.min(free.length,8)],s=HALL_SEATS[i];hallTaken[i]=e;e.hallSeat=i;
+  const [x,z]=L.toWorld(s.x,s.z),[fx,fz]=L.toWorld(s.x+s.face,s.z);
+  e.pos.set(x,hallSlot.y+HALL_BENCH_LIFT,z);e.actor.root.rotation.y=Math.atan2(fx-x,fz-z);e.actor.sit(true,false);e.talking=false;
+ }
+ function leaveHall(e){
+  if(e.hallSeat==null)return;hallTaken[e.hallSeat]=null;e.hallSeat=null;e.actor.sit(false);e.talking=false;
+  const n=nav.nodes.get('door:great-hall');if(n)e.pos.set(n.x,n.y,n.z);
+ }
  // set off for a node anywhere in the castle; arrive(e) runs at the destination
  function travel(e,dest,arrive){
-  stopActivity(e);release(e);e.actor.lookAt?.(null);e.inside=null;
+  stopActivity(e);release(e);e.actor.lookAt?.(null);leaveHall(e);e.inside=null;
   // already under way: finish the stretch you are on (or turn back on it), then follow the new route
   if(e.state==='travel'&&e.path&&e.pi>=0&&e.path[e.pi]){
    const seg=e.path[e.pi],fwd=nav.route(seg.to,dest,{platTo:platTo()});
@@ -270,7 +289,7 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
    if(playerPos)lastPlayer.copy(playerPos);
    for(const e of people){
     const b=bandOfPos(e.pos.x,e.pos.y,e.pos.z);e.band=b;
-    const on=!e.inside&&(b===band||((b==='T'||band==='T')&&Math.abs(e.pos.y-lastPlayer.y)<13&&Math.hypot(e.pos.x-lastPlayer.x,e.pos.z-lastPlayer.z)<50)||(b==='G'&&band==='D'&&lastPlayer.x<34)||(b==='D'&&band==='G'&&e.pos.x<34));
+    const on=(!e.inside||e.hallSeat!=null)&&(b===band||((b==='T'||band==='T')&&Math.abs(e.pos.y-lastPlayer.y)<13&&Math.hypot(e.pos.x-lastPlayer.x,e.pos.z-lastPlayer.z)<50)||(b==='G'&&band==='D'&&lastPlayer.x<34)||(b==='D'&&band==='G'&&e.pos.x<34));
     e.active=on;e.actor.root.visible=on;
    }
    const sOn=spirit.band===band&&!spirit.hidden;spirit.root.visible=sOn;spirit.active=sOn;
@@ -281,6 +300,7 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
    lastPlayer.copy(playerPos);
    // the bell: a new period sends everyone on their way, a few seconds apart
    const now=periodAt(time+clockOffset,night);
+   castleState.meal=!!now.period.meal;castleState.period=now.period.id;
    if(!current||now.index!==current.index||now.day!==current.day){
     const first=!current;current=now;
     for(const e of people){if(first)applyPlan(e,true);else e.pending=time+Math.random()*14;}
@@ -288,7 +308,15 @@ export function createCastleLife({castle,scene,createActor,labelSprite,bark,effe
    }
    for(const e of people){
     if(e.pending&&time>=e.pending){e.pending=0;applyPlan(e,false);}
-    if(e.state==='inside'){e.motion.speed=0;continue;}
+    if(e.state==='inside'){
+     e.motion.speed=0;
+     if(e.inside==='great-hall'){
+      if(e.hallSeat==null&&hallSlot?.loaded&&now.period.meal)seatInHall(e);
+      else if(e.hallSeat!=null&&!hallSlot?.loaded)leaveHall(e);
+      if(e.hallSeat!=null){e.talking=Math.sin(time*.8+e.idx*1.7)>.35;if(Math.random()<dt*.12)e.actor.gesture(rnd(['nod','laugh','nod','shrug']));}
+     }
+     continue;
+    }
     e.timer-=dt;
     const toPlayer=tmp.copy(playerPos).sub(e.pos);toPlayer.y=0;const pd=Math.abs(playerPos.y-e.pos.y)<2.2?toPlayer.length():99;
     // a friendly wave when you pass close by
