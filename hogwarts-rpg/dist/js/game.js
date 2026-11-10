@@ -2433,8 +2433,8 @@ function fixedStep(dt) {
   // castle residents live on the floor you are on; the rest wait, hidden
   if (zone === "castle" && life) {
     const band = castleBand(playerPos.y);
-    life.setActive(band);
-    if (!dialogueNpc) life.update(dt, elapsed, playerPos, player, band, { douse: (p) => castle.douse(p, elapsed) });
+    life.setActive(band, playerPos);
+    if (!dialogueNpc) life.update(dt, elapsed, playerPos, player, band, { douse: (p) => castle.douse(p, elapsed), night: timeMode === 1 });
   }
   updateActors(dt);
   duels.update(dt, elapsed);

@@ -1,4 +1,5 @@
 import * as T from '../assets/three.module.js';
+import {PLATFORM_DIRS} from './nav.js';
 import {batchStatic} from './batch.js';
 import {mergeGeometries} from '../assets/addons/utils/BufferGeometryUtils.js';
 
@@ -310,7 +311,7 @@ void main(){
  flight(bands.T,11,0,FLOORS.F2,3,0,FLOORS.F2+4);ramp({x0:3,x1:11.2,z0:-1.6,z1:1.6,ramp:'x',c0:11,c1:3,y0:FLOORS.F2,y1:FLOORS.F2+4});
  // turning platforms: each carries one flight up to the next gallery; they rotate between allowed landings
  const platforms=[];
- for(const [y,dirs] of [[4,[0,Math.PI/2,Math.PI]],[12,[0,Math.PI/2,-Math.PI/2]],[20,[Math.PI/2,Math.PI,-Math.PI/2]]]){
+ for(const [y,dirs] of PLATFORM_DIRS.map((d,i)=>[4+i*8,d])){
   const piv=new T.Group();piv.position.set(0,0,0);piv.userData.noBatch=true;bands.T.add(piv);
   const deck=new T.Mesh(new T.BoxGeometry(6,.45,6),M.floor);deck.position.y=y-.225;piv.add(deck);disposables.push(deck.geometry);
   for(const [x,z] of [[-2.9,-2.9],[2.9,-2.9],[-2.9,2.9],[2.9,2.9]]){const p=new T.Mesh(new T.CylinderGeometry(.12,.12,1.1,8),M.gold);p.position.set(x,y+.55,z);piv.add(p);disposables.push(p.geometry);}
